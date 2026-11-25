@@ -90,6 +90,8 @@ The server enforces these amounts, and guests' pages update within about 15 seco
 | Colours | top of `assets/styles.css` |
 | Admin password | `ADMIN_PASSWORD` in Code.gs (then deploy a new version) |
 
+> **After editing any file in `assets/`**, change the `?v=2` at the end of the `assets/…` links in all four `.html` files to a new number (`?v=3`, and so on). Browsers keep old copies for up to 10 minutes, and the new number makes them load the fresh files straight away.
+
 **Adding a new artwork:** resize the photo (about 1400px wide for `images/full/`, 560px for `images/thumb/`). On a Mac:
 
 ```bash
