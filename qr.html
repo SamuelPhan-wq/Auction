@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>QR Labels — LCTW Silent Auction</title>
+  <link rel="icon" href="assets/favicon-32.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Forum&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <main class="page">
+    <div class="panel no-print" style="margin-bottom:1rem">
+      <h1 style="margin-top:0">QR code labels</h1>
+      <p>Print these and place each label next to its artwork. Scanning a code opens that artwork’s bid page. The first page is a poster that opens the full gallery.</p>
+      <div id="warn"></div>
+      <div class="controls-row">
+        <label class="field"><span>Website address used in the QR codes</span><input type="text" id="base" spellcheck="false"></label>
+        <button class="btn secondary" id="apply">Update codes</button>
+        <button class="btn" onclick="window.print()">🖨 Print</button>
+      </div>
+      <label class="check" style="margin-top:.8rem"><input type="checkbox" id="show-poster" checked><span>Include “View all artworks” poster</span></label>
+    </div>
+
+    <section class="panel qr-poster" id="poster">
+      <img src="assets/lctw-logo.png" alt="LCTW" style="width:120px;margin:0 auto .5rem">
+      <h1 id="poster-title" style="color:#0f4a3e"></h1>
+      <p style="font-size:1.15rem">Scan to see every artwork and place your bid</p>
+      <div class="qr" id="poster-qr"></div>
+      <p class="muted small" id="poster-url" style="word-break:break-all"></p>
+    </section>
+
+    <div class="qr-grid" id="grid" style="margin-top:1rem"></div>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="assets/config.js"></script>
+  <script src="assets/items.js"></script>
+  <script src="assets/app.js"></script>
+  <script>
+  (function () {
+    const A = window.Auction;
+    A.renderChrome('');
+    const base = document.getElementById('base');
+    base.value = A.siteBase();
+    document.getElementById('poster-title').textContent = A.CFG.title || 'Silent Auction';
+
+    function makeQR(el, text, size) {
+      el.innerHTML = '';
+      if (!window.QRCode) { el.textContent = 'QR library could not load — check your internet connection.'; return; }
+      new QRCode(el, { text: text, width: size, height: size, colorDark: '#082a23', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+    }
+
+    function render() {
+      let b = base.value.trim();
+      if (b && !/\/$/.test(b)) b += '/';
+      const local = !/^https?:\/\//.test(b) || /localhost|127\.0\.0\.1/.test(b);
+      document.getElementById('warn').innerHTML = local
+        ? '<div class="alert error">This address only works on this computer. Enter your public GitHub Pages address (e.g. https://your-name.github.io/lctw-auction/) before printing, or set <code>siteUrl</code> in assets/config.js.</div>'
+        : '';
+
+      makeQR(document.getElementById('poster-qr'), b + 'index.html', 440);
+      document.getElementById('poster-url').textContent = b;
+
+      const grid = document.getElementById('grid');
+      grid.innerHTML = A.ITEMS.map(function (it, n) {
+        return '<div class="qr-card">' +
+          '<div class="qr-head"><img src="assets/lctw-logo.png" alt=""><b>LCTW Silent Auction</b></div>' +
+          '<div><div class="lot">Lot ' + A.esc(it.lot) + '</div><h3>' + A.esc(it.title) + '</h3>' +
+          '<div style="font-size:.85rem;color:#5d6573">' + A.esc(it.medium) + '</div>' +
+          '<div style="margin-top:.4rem;font-size:.9rem">Starting bid <b>' + A.money(it.startingBid) + '</b></div>' +
+          '<div class="scan" style="margin-top:.5rem">📱 Scan to bid →</div></div>' +
+          '<div class="qr" id="qr-' + n + '"></div>' +
+          '<div class="url">' + A.esc(b + A.itemUrl(it)) + '</div>' +
+          '</div>';
+      }).join('');
+      A.ITEMS.forEach(function (it, n) { makeQR(document.getElementById('qr-' + n), b + A.itemUrl(it), 264); });
+    }
+    document.getElementById('apply').onclick = render;
+    base.addEventListener('keydown', function (e) { if (e.key === 'Enter') render(); });
+    document.getElementById('show-poster').onchange = function (e) { document.getElementById('poster').classList.toggle('hidden', !e.target.checked); };
+    render();
+  })();
+  </script>
+</body>
+</html>

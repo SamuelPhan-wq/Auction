@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <title>Admin — LCTW Silent Auction</title>
+  <meta name="theme-color" content="#0f4a3e">
+  <link rel="icon" href="assets/favicon-32.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Forum&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <main class="page">
+    <!-- Login -->
+    <section class="panel login" id="login">
+      <h2>Admin sign in</h2>
+      <p class="muted">Enter the admin password set in the Google Apps Script.</p>
+      <form id="login-form">
+        <div id="login-msg"></div>
+        <label class="field"><span>Password</span><input type="password" name="key" required autocomplete="current-password"></label>
+        <button class="btn block" type="submit">Sign in</button>
+      </form>
+    </section>
+
+    <!-- Dashboard -->
+    <section id="dash" class="hidden">
+      <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:1rem">
+        <h1 style="margin:0">Auction dashboard</h1>
+        <div class="spacer"></div>
+        <span class="muted small" id="updated"></span>
+        <button class="btn secondary small" id="refresh">↻ Refresh</button>
+        <button class="btn secondary small" id="logout">Sign out</button>
+      </div>
+
+      <div class="stats" id="stats"></div>
+
+      <div class="panel" style="margin-bottom:1rem">
+        <h3 style="margin-top:0">Auction status: <span id="state-label"></span></h3>
+        <div class="controls-row">
+          <label class="field"><span>Bidding closes at <small>(your local time — leave empty for no end time)</small></span><input type="datetime-local" id="ends"></label>
+          <button class="btn secondary" id="save-ends">Save end time</button>
+          <button class="btn" id="toggle-closed"></button>
+        </div>
+      </div>
+
+      <div class="admin-actions">
+        <a class="btn sand" href="qr.html" target="_blank">▦ Print QR code labels</a>
+        <button class="btn secondary" id="csv-winners">⬇ Winners (CSV)</button>
+        <button class="btn secondary" id="csv-all">⬇ All bids (CSV)</button>
+        <a class="btn secondary hidden" id="sheet-link" target="_blank" rel="noopener">Open Google Sheet</a>
+        <a class="btn secondary" href="index.html" target="_blank">View public gallery</a>
+      </div>
+
+      <div class="toolbar">
+        <div class="search">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <input type="search" id="q" placeholder="Search lot, title, bidder name or phone">
+        </div>
+        <div class="chips">
+          <button class="chip" data-f="all" aria-pressed="true">All lots</button>
+          <button class="chip" data-f="bids" aria-pressed="false">With bids</button>
+          <button class="chip" data-f="none" aria-pressed="false">No bids</button>
+        </div>
+      </div>
+
+      <p class="muted small">Tap a row to see every bid for that lot. Use <b>Remove</b> to cancel a mistaken or joke bid.</p>
+      <div class="table-wrap">
+        <table class="lots">
+          <thead><tr>
+            <th data-sort="lot">Lot</th><th></th><th data-sort="title">Artwork</th><th data-sort="high">Top bid</th>
+            <th data-sort="name">Top bidder</th><th>Phone</th><th data-sort="count">Bids</th><th data-sort="time">Last bid</th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="assets/config.js"></script>
+  <script src="assets/items.js"></script>
+  <script src="assets/app.js"></script>
+  <script>
+  (function () {
+    const A = window.Auction;
+    A.renderChrome('');
+    let KEY = sessionStorage.getItem('lctw-admin-key') || '';
+    let DATA = null;
+    let sortKey = 'lot', sortDir = 1, filter = 'all';
+    const open = new Set();
+
+    const $ = function (id) { return document.getElementById(id); };
+
+    // ----- login -----
+    $('login-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      KEY = e.target.elements.key.value;
+      load(true);
+    });
+    $('logout').onclick = function () { sessionStorage.removeItem('lctw-admin-key'); location.reload(); };
+    if (A.DEMO) $('login-msg').innerHTML = '<div class="alert info">Demo mode — the password is <b>demo</b></div>';
+
+    function load(fromLogin) {
+      return A.api.post({ action: 'admin', key: KEY }).then(function (res) {
+        sessionStorage.setItem('lctw-admin-key', KEY);
+        DATA = res;
+        $('login').classList.add('hidden');
+        $('dash').classList.remove('hidden');
+        draw();
+      }).catch(function (err) {
+        if (fromLogin || !DATA) {
+          $('login').classList.remove('hidden'); $('dash').classList.add('hidden');
+          $('login-msg').innerHTML = '<div class="alert error">' + A.esc(err.message) + '</div>';
+        } else A.toast('Refresh failed: ' + err.message);
+      });
+    }
+    if (KEY) load();
+    setInterval(function () { if (DATA && !document.hidden) load(); }, Math.max(10, A.CFG.refreshSeconds || 15) * 1000);
+    $('refresh').onclick = function () { load().then(function () { A.toast('Updated'); }); };
+
+    // ----- compute per-lot summary -----
+    function lots() {
+      const byItem = {};
+      DATA.bids.forEach(function (b) { (byItem[b.itemId] = byItem[b.itemId] || []).push(b); });
+      const known = A.ITEMS.map(function (it) { return it.id; });
+      // Bids for lots no longer in items.js still show up so nothing is lost
+      Object.keys(byItem).forEach(function (id) {
+        if (known.indexOf(id) < 0) A.ITEMS.push({ id: id, lot: 999, title: (byItem[id][0].itemTitle || id) + ' (not in items.js)', image: '', startingBid: 0, minIncrement: 1 });
+      });
+      return A.ITEMS.map(function (it) {
+        const all = (byItem[it.id] || []).slice().sort(function (a, b) { return b.amount - a.amount || b.time - a.time; });
+        const active = all.filter(function (b) { return b.status !== 'removed'; });
+        const top = active[0] || null;
+        return { it: it, all: all, active: active, top: top, last: active.reduce(function (m, b) { return Math.max(m, b.time); }, 0) };
+      });
+    }
+
+    function draw() {
+      const L = lots();
+      const s = DATA.settings || {};
+      const active = DATA.bids.filter(function (b) { return b.status !== 'removed'; });
+      const raised = L.reduce(function (sum, l) { return sum + (l.top ? l.top.amount : 0); }, 0);
+      const bidders = new Set(active.map(function (b) { return b.phone.replace(/\D/g, ''); }));
+      const withBids = L.filter(function (l) { return l.top; }).length;
+
+      $('stats').innerHTML = [
+        [A.money(raised), 'Total of top bids'],
+        [withBids + ' / ' + A.ITEMS.length, 'Lots with bids'],
+        [active.length, 'Bids placed'],
+        [bidders.size, 'Bidders'],
+      ].map(function (x) { return '<div class="stat"><b>' + x[0] + '</b><span>' + x[1] + '</span></div>'; }).join('');
+
+      $('state-label').innerHTML = s.isClosed ? '<span class="tag bad">Closed</span>' : '<span class="tag ok">Open for bids</span>';
+      $('toggle-closed').textContent = s.closed ? 'Re-open bidding' : 'Close bidding now';
+      $('toggle-closed').className = 'btn ' + (s.closed ? '' : 'danger');
+      if (document.activeElement !== $('ends')) $('ends').value = s.endsAt ? toLocalInput(s.endsAt) : '';
+      if (DATA.sheetUrl) { $('sheet-link').href = DATA.sheetUrl; $('sheet-link').classList.remove('hidden'); }
+      $('updated').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+
+      const term = $('q').value.trim().toLowerCase();
+      let rows = L.filter(function (l) {
+        if (filter === 'bids' && !l.top) return false;
+        if (filter === 'none' && l.top) return false;
+        if (!term) return true;
+        const hay = [l.it.lot, l.it.title].concat(l.all.map(function (b) { return b.name + ' ' + b.phone + ' ' + b.email; })).join(' ').toLowerCase();
+        return hay.includes(term);
+      });
+      rows.sort(function (a, b) {
+        const v = {
+          lot: a.it.lot - b.it.lot,
+          title: a.it.title.localeCompare(b.it.title),
+          high: (a.top ? a.top.amount : -1) - (b.top ? b.top.amount : -1),
+          name: (a.top ? a.top.name : '~').localeCompare(b.top ? b.top.name : '~'),
+          count: a.active.length - b.active.length,
+          time: a.last - b.last,
+        }[sortKey];
+        return v * sortDir || a.it.lot - b.it.lot;
+      });
+
+      $('rows').innerHTML = rows.map(function (l) {
+        const it = l.it, t = l.top, isOpen = open.has(it.id);
+        let html = '<tr class="lot-row" data-id="' + A.esc(it.id) + '">' +
+          '<td><b>' + A.esc(it.lot) + '</b></td>' +
+          '<td>' + (it.image ? '<img src="' + A.esc(A.thumb(it)) + '" alt="" loading="lazy">' : '') + '</td>' +
+          '<td><b>' + A.esc(it.title) + '</b><div class="muted small">Start ' + A.money(it.startingBid) + '</div></td>' +
+          '<td class="amt">' + (t ? A.money(t.amount) : '<span class="tag grey">No bids</span>') + '</td>' +
+          '<td>' + (t ? A.esc(t.name) + (t.anonymous ? ' <span class="tag grey">anon</span>' : '') + (t.email ? '<div class="muted small">' + A.esc(t.email) + '</div>' : '') : '') + '</td>' +
+          '<td>' + (t ? '<a href="tel:' + A.esc(t.phone.replace(/[^\d+]/g, '')) + '" onclick="event.stopPropagation()">' + A.esc(t.phone) + '</a>' : '') + '</td>' +
+          '<td>' + l.active.length + '</td>' +
+          '<td class="small muted">' + (l.last ? A.esc(A.timeAgo(l.last)) : '') + '</td>' +
+          '</tr>';
+        if (isOpen) {
+          html += '<tr class="detail"><td colspan="8">' + (l.all.length
+            ? '<table class="bids"><tr><th>Amount</th><th>Name</th><th>Phone</th><th>Email</th><th>Time</th><th></th></tr>' +
+              l.all.map(function (b) {
+                return '<tr class="' + (b.status === 'removed' ? 'removed' : '') + '"><td><b>' + A.money(b.amount) + '</b></td><td>' + A.esc(b.name) + '</td>' +
+                  '<td><a href="tel:' + A.esc(b.phone.replace(/[^\d+]/g, '')) + '">' + A.esc(b.phone) + '</a></td><td>' + A.esc(b.email) + '</td>' +
+                  '<td class="small">' + new Date(b.time).toLocaleString() + '</td>' +
+                  '<td style="text-align:right">' + (b.status === 'removed'
+                    ? '<button class="btn secondary small" data-restore="' + A.esc(b.id) + '">Restore</button>'
+                    : '<button class="btn danger small" data-remove="' + A.esc(b.id) + '">Remove</button>') + '</td></tr>';
+              }).join('') + '</table>'
+            : '<span class="muted">No bids yet.</span>') +
+            ' <a class="small" href="' + A.esc(A.itemUrl(it)) + '" target="_blank">Open public page ↗</a></td></tr>';
+        }
+        return html;
+      }).join('') || '<tr><td colspan="8" class="empty">No lots match.</td></tr>';
+    }
+
+    // ----- interactions -----
+    $('rows').addEventListener('click', function (e) {
+      const rm = e.target.closest('[data-remove]'), rs = e.target.closest('[data-restore]');
+      if (rm || rs) {
+        const bidId = (rm || rs).dataset.remove || (rm || rs).dataset.restore;
+        if (rm && !confirm('Remove this bid? The next highest bid becomes the leader. (You can restore it later.)')) return;
+        (rm || rs).disabled = true;
+        A.api.post({ action: rm ? 'removeBid' : 'restoreBid', key: KEY, bidId: bidId })
+          .then(function (res) { DATA = res; draw(); A.toast(rm ? 'Bid removed' : 'Bid restored'); })
+          .catch(function (err) { alert(err.message); draw(); });
+        return;
+      }
+      const row = e.target.closest('tr.lot-row'); if (!row) return;
+      const id = row.dataset.id; open.has(id) ? open.delete(id) : open.add(id); draw();
+    });
+    A.$$('th[data-sort]').forEach(function (th) {
+      th.addEventListener('click', function () {
+        if (sortKey === th.dataset.sort) sortDir = -sortDir; else { sortKey = th.dataset.sort; sortDir = ['high', 'count', 'time'].indexOf(sortKey) >= 0 ? -1 : 1; }
+        draw();
+      });
+    });
+    A.$$('.chip[data-f]').forEach(function (c) {
+      c.addEventListener('click', function () { filter = c.dataset.f; A.$$('.chip[data-f]').forEach(function (x) { x.setAttribute('aria-pressed', String(x === c)); }); draw(); });
+    });
+    $('q').addEventListener('input', draw);
+
+    function settings(body) {
+      return A.api.post(Object.assign({ action: 'settings', key: KEY }, body)).then(function (res) { DATA = res; draw(); }).catch(function (err) { alert(err.message); });
+    }
+    $('toggle-closed').onclick = function () {
+      const closing = !DATA.settings.closed;
+      if (closing && !confirm('Close bidding now? Nobody will be able to place new bids until you re-open.')) return;
+      settings({ closed: closing }).then(function () { A.toast(closing ? 'Bidding closed' : 'Bidding re-opened'); });
+    };
+    $('save-ends').onclick = function () {
+      const v = $('ends').value;
+      settings({ endsAt: v ? new Date(v).getTime() : null }).then(function () { A.toast(v ? 'End time saved' : 'End time cleared'); });
+    };
+    function toLocalInput(ms) {
+      const d = new Date(ms); const p = function (n) { return String(n).padStart(2, '0'); };
+      return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+    }
+
+    // ----- CSV exports -----
+    function csv(rows, name) {
+      const cell = function (v) { v = String(v == null ? '' : v); if (/^[=+\-@]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; };
+      const text = '﻿' + rows.map(function (r) { return r.map(cell).join(','); }).join('\r\n');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
+      a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    }
+    $('csv-winners').onclick = function () {
+      const rows = [['Lot', 'Artwork', 'Winning bid', 'Name', 'Phone', 'Email', 'Number of bids', 'Bid time']];
+      lots().sort(function (a, b) { return a.it.lot - b.it.lot; }).forEach(function (l) {
+        const t = l.top;
+        rows.push([l.it.lot, l.it.title, t ? t.amount : '', t ? t.name : 'NO BIDS', t ? t.phone : '', t ? t.email : '', l.active.length, t ? new Date(t.time).toLocaleString() : '']);
+      });
+      csv(rows, 'lctw-auction-winners.csv');
+    };
+    $('csv-all').onclick = function () {
+      const rows = [['Time', 'Lot', 'Artwork', 'Amount', 'Name', 'Phone', 'Email', 'Anonymous', 'Status', 'Bid ID']];
+      DATA.bids.slice().sort(function (a, b) { return a.time - b.time; }).forEach(function (b) {
+        const it = A.itemById(b.itemId) || { lot: '', title: b.itemTitle };
+        rows.push([new Date(b.time).toLocaleString(), it.lot, it.title, b.amount, b.name, b.phone, b.email, b.anonymous ? 'yes' : '', b.status, b.id]);
+      });
+      csv(rows, 'lctw-auction-all-bids.csv');
+    };
+  })();
+  </script>
+</body>
+</html>
