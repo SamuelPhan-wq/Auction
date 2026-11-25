@@ -281,7 +281,7 @@ table.bids tr.removed td { text-decoration: line-through; color: var(--muted); }
 .qr-card .qr { width: 132px; height: 132px; }
 .qr-card .qr img, .qr-card .qr canvas { width: 132px !important; height: 132px !important; }
 .qr-card .scan { font-weight: 800; color: #1c7a66; font-size: .95rem; }
-.qr-card .url { grid-column: 1 / -1; font-size: .7rem; color: #5d6573; word-break: break-all; }
+.qr-card .url { grid-column: 1 / -1; text-align: center; font-family: var(--serif); font-size: 1.15rem; color: #1c7a66; border-top: 1px solid #e2dfd6; padding-top: .45rem; }
 .qr-poster { text-align: center; }
 .qr-poster .qr { margin: .75rem auto; width: 220px; height: 220px; }
 .qr-poster .qr img, .qr-poster .qr canvas { width: 220px !important; height: 220px !important; }
