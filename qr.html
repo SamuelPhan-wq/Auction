@@ -12,10 +12,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Forum&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css?v=7">
+  <link rel="stylesheet" href="assets/styles.css?v=8">
   <style>
     /* ---------- A4 sheets: sized in millimetres so print = screen ---------- */
-    @page { size: A4 portrait; margin: 0; }
+    @page { size: A4 portrait; margin: 10mm; }
     .sheets { display: flex; flex-direction: column; align-items: center; gap: 24px; margin-top: 1rem; }
     .a4 {
       width: 210mm; height: 296.5mm; padding: 10mm; overflow: hidden;
@@ -23,8 +23,8 @@
       -webkit-print-color-adjust: exact; print-color-adjust: exact;
       display: grid; gap: 4mm; align-content: start;
     }
-    .a4.labels-6 { grid-template-columns: 93mm 93mm; grid-template-rows: repeat(3, 89mm); }
-    .a4.labels-4 { grid-template-columns: 93mm 93mm; grid-template-rows: repeat(2, 136mm); }
+    .a4.labels-6 { grid-template-columns: 93mm 93mm; grid-template-rows: repeat(3, 88mm); }
+    .a4.labels-4 { grid-template-columns: 93mm 93mm; grid-template-rows: repeat(2, 134mm); }
 
     /* one label */
     .lbl { box-sizing: border-box; border: 0.5mm solid #1c7a66; border-radius: 4mm; padding: 3.5mm 4mm;
@@ -82,8 +82,13 @@
       .topbar, .no-print, .footer, .demo-banner, .toast { display: none !important; }
       .page { padding: 0 !important; margin: 0 !important; max-width: none !important; }
       .sheets { display: block; margin: 0; gap: 0; }
-      .a4 { box-shadow: none; margin: 0; zoom: 1 !important; break-after: page; page-break-after: always; }
+      /* The page margin (10 mm) now comes from @page, so each sheet is just the 190 x 277 mm printable area.
+         A few mm shorter than that so rounding can never spill onto an extra page. */
+      .a4 { box-shadow: none; margin: 0; zoom: 1 !important; width: 190mm; height: 274mm; padding: 0;
+        break-after: page; page-break-after: always; break-inside: avoid; position: relative;
+        transform: translate(var(--nudge-x, 0mm), var(--nudge-y, 0mm)); }
       .a4:last-child { break-after: auto; page-break-after: auto; }
+      .a4.poster { padding: 0; }
     }
   </style>
 </head>
@@ -96,16 +101,24 @@
       <div class="controls-row">
         <label class="field"><span>Label size</span>
           <select id="size">
-            <option value="6">Standard — 6 per A4 page (9.3 × 8.9 cm)</option>
-            <option value="4">Large — 4 per A4 page (9.3 × 13.6 cm)</option>
+            <option value="6">Standard — 6 per A4 page (9.3 × 8.8 cm)</option>
+            <option value="4">Large — 4 per A4 page (9.3 × 13.4 cm)</option>
           </select>
         </label>
         <label class="field"><span>Website address used in the QR codes</span><input type="text" id="base" spellcheck="false"></label>
         <button class="btn secondary" id="apply">Update</button>
       </div>
       <label class="check" style="margin-top:.8rem"><input type="checkbox" id="show-poster" checked><span>Include the “View all artworks” poster as page 1</span></label>
+      <details style="margin:.4rem 0 .2rem">
+        <summary style="cursor:pointer;font-weight:700">Printout not centred? Adjust the position</summary>
+        <p class="muted small" style="margin:.5rem 0">Measure your test print. If everything is 3 mm too high, enter <b>3</b> in “Move down”. Use a minus number to move the other way. Saved on this computer.</p>
+        <div class="controls-row">
+          <label class="field"><span>Move down (mm)</span><input type="number" id="nudge-y" step="0.5" value="0"></label>
+          <label class="field"><span>Move right (mm)</span><input type="number" id="nudge-x" step="0.5" value="0"></label>
+        </div>
+      </details>
       <div class="alert info" style="margin:.6rem 0 1rem">
-        <b>When printing:</b> Paper size <b>A4</b> · Scale <b>100% / Actual size</b> (not “Fit to page”) · Margins <b>None</b> or Default · turn <b>on</b> “Background graphics”.
+        <b>When printing:</b> Paper size <b>A4</b> · Scale <b>100%</b> / “Actual size” (not “Fit to page”) · Margins <b>Default</b> · turn <b>on</b> “Background graphics” · turn <b>off</b> “Headers and footers”.
       </div>
       <button class="btn" onclick="window.print()">🖨 Print <span id="page-count"></span></button>
     </div>
@@ -114,9 +127,9 @@
   </main>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="assets/config.js?v=7"></script>
-  <script src="assets/items.js?v=7"></script>
-  <script src="assets/app.js?v=7"></script>
+  <script src="assets/config.js?v=8"></script>
+  <script src="assets/items.js?v=8"></script>
+  <script src="assets/app.js?v=8"></script>
   <script>
   (function () {
     const A = window.Auction;
@@ -190,6 +203,22 @@
 
     document.getElementById('apply').onclick = render;
     base.addEventListener('keydown', function (e) { if (e.key === 'Enter') render(); });
+    // Printer position correction, in mm
+    function applyNudge() {
+      ['x', 'y'].forEach(function (k) {
+        const el = document.getElementById('nudge-' + k);
+        const v = Math.max(-20, Math.min(20, Number(el.value) || 0));
+        document.documentElement.style.setProperty('--nudge-' + k, v + 'mm');
+        try { localStorage.setItem('lctw-qr-nudge-' + k, String(v)); } catch (_) {}
+      });
+    }
+    ['x', 'y'].forEach(function (k) {
+      const el = document.getElementById('nudge-' + k);
+      try { el.value = localStorage.getItem('lctw-qr-nudge-' + k) || '0'; } catch (_) {}
+      el.addEventListener('input', applyNudge);
+    });
+    applyNudge();
+
     sizeSel.onchange = function () { try { localStorage.setItem('lctw-qr-size', sizeSel.value); } catch (_) {} render(); };
     posterBox.onchange = render;
     render();
