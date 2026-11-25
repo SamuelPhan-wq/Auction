@@ -8,7 +8,10 @@
       medium: window.AUCTION_DEFAULT_MEDIUM || '',
     }, it);
   });
-  ITEMS.forEach(function (it) { it.baseStartingBid = it.startingBid; it.baseMinIncrement = it.minIncrement; });
+  ITEMS.forEach(function (it) {
+    it.baseStartingBid = it.startingBid; it.baseMinIncrement = it.minIncrement;
+    it.baseTitle = it.title; it.baseDescription = it.description || '';
+  });
   let RULES = { defaults: {}, lots: {} };
 
   // Starting bid / increment: admin per-lot rule > admin default > items.js / config.js
@@ -20,6 +23,8 @@
       const d = RULES.defaults;
       it.startingBid = lot.startingBid != null ? lot.startingBid : (d.startingBid != null ? d.startingBid : it.baseStartingBid);
       it.minIncrement = lot.minIncrement != null ? lot.minIncrement : (d.minIncrement != null ? d.minIncrement : it.baseMinIncrement);
+      it.title = lot.title || it.baseTitle;
+      it.description = lot.description || it.baseDescription;
     });
   }
   const DEMO = !CFG.apiUrl;
@@ -82,6 +87,8 @@
     function db() { const d = store(KEY) || { bids: [], settings: { closed: false, endsAt: null } }; d.rules = d.rules || { defaults: {}, lots: {} }; return d; }
     function cleanRule(x) {
       if (!x) return null; const o = {};
+      if (x.title && String(x.title).trim()) o.title = String(x.title).trim().slice(0, 120);
+      if (x.description && String(x.description).trim()) o.description = String(x.description).trim().slice(0, 600);
       if (x.startingBid !== '' && x.startingBid != null) { if (!(Number(x.startingBid) >= 0)) throw new Error('Starting bid must be 0 or more.'); o.startingBid = Number(x.startingBid); }
       if (x.minIncrement !== '' && x.minIncrement != null) { if (!(Number(x.minIncrement) > 0)) throw new Error('Increment must be more than 0.'); o.minIncrement = Number(x.minIncrement); }
       return Object.keys(o).length ? o : null;

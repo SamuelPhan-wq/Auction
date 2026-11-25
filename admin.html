@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Forum&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css?v=3">
+  <link rel="stylesheet" href="assets/styles.css?v=4">
 </head>
 <body>
   <main class="page">
@@ -79,7 +79,7 @@
         </div>
       </div>
 
-      <p class="muted small">Tap a row to see every bid for that lot. Use <b>Remove</b> to cancel a mistaken or joke bid.</p>
+      <p class="muted small">Tap a row to see its bids and to <b>rename the artwork</b>, add a description, or set its own starting bid. Use <b>Remove</b> to cancel a mistaken or joke bid.</p>
       <div class="table-wrap">
         <table class="lots">
           <thead><tr>
@@ -92,9 +92,9 @@
     </section>
   </main>
 
-  <script src="assets/config.js?v=3"></script>
-  <script src="assets/items.js?v=3"></script>
-  <script src="assets/app.js?v=3"></script>
+  <script src="assets/config.js?v=4"></script>
+  <script src="assets/items.js?v=4"></script>
+  <script src="assets/app.js?v=4"></script>
   <script>
   (function () {
     const A = window.Auction;
@@ -238,7 +238,7 @@
         return;
       }
       const reset = e.target.closest('[data-reset]');
-      if (reset) { saveRules({ lotId: reset.closest('form').dataset.lot, rule: null }, 'Lot now uses the defaults'); return; }
+      if (reset) { saveRules({ lotId: reset.closest('form').dataset.lot, rule: null }, 'Lot reset to original'); return; }
       const row = e.target.closest('tr.lot-row'); if (!row) return;
       const id = row.dataset.id; open.has(id) ? open.delete(id) : open.add(id); draw();
     });
@@ -257,11 +257,14 @@
     function lotRuleForm(it) {
       const r = A.getRules().lots[it.id] || {};
       const v = function (x) { return x != null ? A.esc(x) : ''; };
-      return '<form class="controls-row lot-rule" data-lot="' + A.esc(it.id) + '" style="margin-top:.8rem;padding-top:.8rem;border-top:1px solid var(--border)">' +
+      return '<form class="controls-row lot-rule" data-lot="' + A.esc(it.id) + '" style="margin-top:.8rem;padding-top:.8rem;border-top:1px solid var(--border);max-width:min(760px, calc(100vw - 64px))">' +
+        '<h3 style="margin:0;flex-basis:100%">Edit Lot ' + A.esc(it.lot) + '</h3>' +
+        '<label class="field" style="flex-basis:100%"><span>Artwork name <small>(empty = original: ' + A.esc(it.baseTitle) + ')</small></span><input type="text" name="title" maxlength="120" value="' + v(r.title) + '" placeholder="' + A.esc(it.baseTitle) + '"></label>' +
+        '<label class="field" style="flex-basis:100%"><span>Description <small>(optional — shown on the artwork page)</small></span><textarea name="description" rows="2" maxlength="600" placeholder="' + A.esc(it.baseDescription || 'e.g. artist, size, story behind the piece') + '">' + v(r.description) + '</textarea></label>' +
         '<label class="field"><span>Starting bid for this lot <small>(empty = default)</small></span><input type="number" name="startingBid" min="0" step="any" inputmode="decimal" value="' + v(r.startingBid) + '" placeholder="' + A.esc(defaultFor(it, 'startingBid')) + '"></label>' +
         '<label class="field"><span>Increment for this lot <small>(empty = default)</small></span><input type="number" name="minIncrement" min="0" step="any" inputmode="decimal" value="' + v(r.minIncrement) + '" placeholder="' + A.esc(defaultFor(it, 'minIncrement')) + '"></label>' +
-        '<button class="btn secondary" type="submit">Save for this lot</button>' +
-        (A.getRules().lots[it.id] ? '<button class="btn secondary" type="button" data-reset>Use defaults</button>' : '') +
+        '<button class="btn" type="submit">Save changes</button>' +
+        (A.getRules().lots[it.id] ? '<button class="btn secondary" type="button" data-reset>Reset to original</button>' : '') +
         '</form>';
     }
     function defaultFor(it, k) {
@@ -291,7 +294,7 @@
     $('rows').addEventListener('submit', function (e) {
       const f = e.target.closest('form.lot-rule'); if (!f) return;
       e.preventDefault();
-      saveRules({ lotId: f.dataset.lot, rule: { startingBid: f.elements.startingBid.value, minIncrement: f.elements.minIncrement.value } }, 'Saved for this lot');
+      saveRules({ lotId: f.dataset.lot, rule: { title: f.elements.title.value, description: f.elements.description.value, startingBid: f.elements.startingBid.value, minIncrement: f.elements.minIncrement.value } }, 'Lot ' + (A.itemById(f.dataset.lot) || {}).lot + ' saved');
     });
 
     function settings(body) {

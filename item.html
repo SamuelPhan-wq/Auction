@@ -12,16 +12,16 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Forum&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css?v=3">
+  <link rel="stylesheet" href="assets/styles.css?v=4">
 </head>
 <body class="has-sticky">
   <main class="page" id="page"></main>
   <div class="sticky-bid" id="sticky"></div>
   <div class="lightbox" id="lightbox"><img alt=""></div>
 
-  <script src="assets/config.js?v=3"></script>
-  <script src="assets/items.js?v=3"></script>
-  <script src="assets/app.js?v=3"></script>
+  <script src="assets/config.js?v=4"></script>
+  <script src="assets/items.js?v=4"></script>
+  <script src="assets/app.js?v=4"></script>
   <script>
   (function () {
     const A = window.Auction;
@@ -47,9 +47,9 @@
         '<div>' +
           '<div class="panel">' +
             '<div class="kicker">Lot ' + A.esc(it.lot) + (it.artist ? ' · ' + A.esc(it.artist) : '') + '</div>' +
-            '<h1 class="item-title">' + A.esc(it.title) + '</h1>' +
+            '<h1 class="item-title" id="art-title">' + A.esc(it.title) + '</h1>' +
             '<div class="muted">' + A.esc(it.medium) + '</div>' +
-            (it.description ? '<p style="margin-top:.6rem">' + A.esc(it.description) + '</p>' : '') +
+            '<p id="art-desc" style="margin-top:.6rem"></p>' +
             (it.value ? '<div class="muted small" style="margin-top:.3rem">Estimated value: ' + A.money(it.value) + '</div>' : '') +
             '<div class="current"><div><div class="price-label" id="price-label"></div><div class="price" id="price"></div><div class="muted small" id="price-meta"></div></div><div id="mine"></div></div>' +
             '<div class="status-pill" id="status" style="background:var(--mint-soft);color:var(--brand);margin:0 0 1rem"></div>' +
@@ -88,6 +88,12 @@
     function draw() {
       const i = A.info(it);
       const closed = A.isClosed();
+      // Name and description can be changed from the admin page
+      document.getElementById('art-title').textContent = it.title;
+      document.getElementById('art-desc').textContent = it.description || '';
+      document.getElementById('art-desc').hidden = !it.description;
+      document.getElementById('art').alt = it.title;
+      document.title = it.title + ' — Lot ' + it.lot + ' — LCTW Silent Auction';
       document.getElementById('price-label').textContent = i.count ? (closed ? 'Winning bid' : 'Current bid') : 'Starting bid';
       document.getElementById('price').textContent = A.money(i.count ? i.high : it.startingBid);
       document.getElementById('price-meta').textContent = i.count ? i.count + ' bid' + (i.count > 1 ? 's' : '') + ' · leader: ' + i.highName : 'No bids yet — be the first!';

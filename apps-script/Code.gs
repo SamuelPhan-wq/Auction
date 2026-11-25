@@ -3,14 +3,17 @@
  * ------------------------------------------------------------
  * 1. Create a new Google Sheet (e.g. "LCTW Auction Bids").
  * 2. Extensions → Apps Script. Delete the sample code, paste this whole file.
- * 3. Change ADMIN_PASSWORD below. Save.
+ * 3. Save. Then set the admin password: ⚙️ Project Settings → Script properties →
+ *    Add script property → Property: ADMIN_PASSWORD   Value: your password → Save.
+ *    (Keeping it there means pasting new code never wipes or publishes it.)
  * 4. Deploy → New deployment → type "Web app".
  *      Execute as: Me      Who has access: Anyone
  *    Copy the Web app URL into assets/config.js (apiUrl).
  * When you change this code later: Deploy → Manage deployments → Edit → Version: New version.
  */
 
-const ADMIN_PASSWORD = 'change-me-please';   // <-- CHANGE THIS in the Apps Script editor only — never commit your real password
+// Leave this as is. Set the real password in Project Settings → Script properties (ADMIN_PASSWORD).
+const ADMIN_PASSWORD = 'change-me-please';
 const SHEET_NAME = 'Bids';
 const HEADERS = ['Bid ID', 'Time', 'Lot ID', 'Lot title', 'Amount', 'Name', 'Phone', 'Email', 'Anonymous', 'Status'];
 const HISTORY_LENGTH = 8;
@@ -116,7 +119,11 @@ function publicState_(skipCache) {
 
 // ---------- Admin ----------
 function requireAdmin_(b) {
-  if (String(b.key || '') !== ADMIN_PASSWORD) throw new Error('Wrong admin password.');
+  const pw = PropertiesService.getScriptProperties().getProperty('ADMIN_PASSWORD') || ADMIN_PASSWORD;
+  if (!pw || pw === 'change-me-please') {
+    throw new Error('Admin password not set. In Apps Script: Project Settings → Script properties → add ADMIN_PASSWORD.');
+  }
+  if (String(b.key || '') !== pw) throw new Error('Wrong admin password.');
 }
 
 function adminData_() {
@@ -168,6 +175,8 @@ function ruleFor_(itemId) {
 function cleanRule_(x) {
   if (!x) return null;
   const out = {};
+  if (x.title != null && String(x.title).trim()) out.title = clean_(x.title, 120);
+  if (x.description != null && String(x.description).trim()) out.description = clean_(x.description, 600);
   if (x.startingBid !== '' && x.startingBid != null) {
     const s = Number(x.startingBid);
     if (!isFinite(s) || s < 0) throw new Error('Starting bid must be 0 or more.');

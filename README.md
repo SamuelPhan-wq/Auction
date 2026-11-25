@@ -40,7 +40,7 @@ Then go to http://localhost:8000.
 
 1. Go to [sheets.new](https://sheets.new) and name the sheet **LCTW Auction Bids**.
 2. Open **Extensions → Apps Script**. Delete everything there and paste in the full contents of [`apps-script/Code.gs`](apps-script/Code.gs).
-3. On the line `const ADMIN_PASSWORD = 'change-me-please';`, change the password. Click **Save** 💾.
+3. Click **Save** 💾. Then set the admin password: click ⚙️ **Project Settings** (left side) → **Script properties** → **Add script property**. Property: `ADMIN_PASSWORD`, Value: your password → **Save script properties**. Never type the real password into `Code.gs`, because that file is public on GitHub.
 4. Click **Deploy → New deployment**. Click the ⚙️ next to "Select type" and choose **Web app**.
    - *Execute as:* **Me**
    - *Who has access:* **Anyone**
@@ -70,11 +70,11 @@ Open `https://YOUR-NAME.github.io/lctw-auction/admin.html`, sign in, and click *
 - After closing, click **Winners (CSV)** for the list of who to call and how much they owe.
 - If someone places a joke bid, open that lot in the admin table and click **Remove**.
 
-## Starting bids and increments (from the admin page)
+## Names, descriptions, starting bids and increments (from the admin page)
 
 No code editing needed. On the admin page:
 - **Starting bids & increments** panel: sets the default for every lot.
-- **Tap any lot** in the table to give that lot its own starting bid and/or increment. It is marked **custom**. **Use defaults** removes it again.
+- **Tap any lot** in the table to **rename the artwork**, add a description, or give it its own starting bid and/or increment. It is marked **custom**. **Reset to original** undoes all of these.
 
 The server enforces these amounts, and guests' pages update within about 15 seconds. Which amount wins: the lot's own setting → the admin default → `items.js` → `config.js`. Changing a starting bid only matters until the first bid; after that, the increment sets the next minimum.
 
@@ -86,9 +86,10 @@ The server enforces these amounts, and guests' pages update within about 15 seco
 |---|---|
 | Starting bids and increments | **Admin page** (see above) |
 | Title, currency, fallback starting bid and increment | `assets/config.js` |
-| Artwork names, lot numbers, per-item starting bids, descriptions, artist | `assets/items.js` |
+| Artwork names and descriptions | **Admin page** (tap a lot), or `assets/items.js` |
+| Lot numbers, photos, adding/removing artworks | `assets/items.js` |
 | Colours | top of `assets/styles.css` |
-| Admin password | `ADMIN_PASSWORD` in Code.gs (then deploy a new version) |
+| Admin password | Apps Script → ⚙️ Project Settings → Script properties → `ADMIN_PASSWORD` (takes effect immediately) |
 
 > **After editing any file in `assets/`**, change the `?v=3` at the end of the `assets/…` links in all four `.html` files to a new number (`?v=4`, and so on). Browsers keep old copies for up to 10 minutes, and the new number makes them load the fresh files straight away.
 
