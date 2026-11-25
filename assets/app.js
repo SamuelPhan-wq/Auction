@@ -231,7 +231,7 @@
     const f = document.createElement('footer');
     f.className = 'footer no-print';
     f.innerHTML = '<div class="footer-host"><span>Hosted by</span><img src="assets/le-charme-logo.jpg" alt="Le Charme Vientiane Hotel"></div>' +
-      'Lao Conservation Trust for Wildlife · All proceeds support wildlife rescue and conservation in Laos';
+      'Lao Conservation Trust for Wildlife · All proceeds from the auction support wildlife rescue and conservation in Laos';
     document.body.appendChild(f);
   }
 
