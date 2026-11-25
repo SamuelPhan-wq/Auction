@@ -37,6 +37,7 @@ function doPost(e) {
       case 'removeBid':  requireAdmin_(body); return json_(setBidStatus_(body.bidId, 'removed'));
       case 'restoreBid': requireAdmin_(body); return json_(setBidStatus_(body.bidId, 'active'));
       case 'settings':   requireAdmin_(body); return json_(saveSettings_(body));
+      case 'rules':      requireAdmin_(body); return json_(saveRules_(body));
       default:           return json_({ ok: false, error: 'Unknown action' });
     }
   } catch (err) {
@@ -53,8 +54,10 @@ function placeBid_(b) {
   const email = clean_(b.email, 120);
   const anonymous = b.anonymous ? 'yes' : '';
   const amount = Math.round(Number(b.amount) * 100) / 100;
-  const startingBid = Math.max(0, Number(b.startingBid) || 0);
-  const minIncrement = Math.max(1, Number(b.minIncrement) || 1);
+  // Rules set on the admin page win; otherwise use the values from items.js / config.js
+  const rule = ruleFor_(itemId);
+  const startingBid = rule.startingBid != null ? rule.startingBid : Math.max(0, Number(b.startingBid) || 0);
+  const minIncrement = rule.minIncrement != null ? rule.minIncrement : Math.max(1, Number(b.minIncrement) || 1);
 
   if (!/^[a-z0-9-]{1,60}$/.test(itemId)) throw new Error('Unknown artwork.');
   if (name.length < 2) throw new Error('Please enter your name.');
@@ -105,7 +108,7 @@ function publicState_(skipCache) {
     items[k].history.sort(function (a, b) { return b.amount - a.amount; });
     items[k].history = items[k].history.slice(0, HISTORY_LENGTH);
   });
-  const state = { ok: true, items: items, settings: getSettings_(), serverTime: Date.now() };
+  const state = { ok: true, items: items, settings: getSettings_(), rules: getRules_(), serverTime: Date.now() };
   state.settings.isClosed = isClosed_(state.settings);
   try { cache.put('state', JSON.stringify(state), 5); } catch (_) {}
   return state;
@@ -123,7 +126,7 @@ function adminData_() {
   });
   const settings = getSettings_();
   settings.isClosed = isClosed_(settings);
-  return { ok: true, bids: rows, settings: settings, serverTime: Date.now(),
+  return { ok: true, bids: rows, settings: settings, rules: getRules_(), serverTime: Date.now(),
            sheetUrl: SpreadsheetApp.getActiveSpreadsheet().getUrl() };
 }
 
@@ -141,6 +144,56 @@ function setBidStatus_(bidId, status) {
       }
     }
     throw new Error('Bid not found.');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ---------- Starting bids & increments set from the admin page ----------
+// Stored as { defaults: {startingBid, minIncrement}, lots: { lotId: {startingBid, minIncrement} } }
+function getRules_() {
+  try {
+    const r = JSON.parse(PropertiesService.getScriptProperties().getProperty('rules') || '{}');
+    return { defaults: r.defaults || {}, lots: r.lots || {} };
+  } catch (_) { return { defaults: {}, lots: {} }; }
+}
+function ruleFor_(itemId) {
+  const r = getRules_();
+  const lot = r.lots[itemId] || {};
+  return {
+    startingBid: lot.startingBid != null ? lot.startingBid : (r.defaults.startingBid != null ? r.defaults.startingBid : null),
+    minIncrement: lot.minIncrement != null ? lot.minIncrement : (r.defaults.minIncrement != null ? r.defaults.minIncrement : null),
+  };
+}
+function cleanRule_(x) {
+  if (!x) return null;
+  const out = {};
+  if (x.startingBid !== '' && x.startingBid != null) {
+    const s = Number(x.startingBid);
+    if (!isFinite(s) || s < 0) throw new Error('Starting bid must be 0 or more.');
+    out.startingBid = s;
+  }
+  if (x.minIncrement !== '' && x.minIncrement != null) {
+    const m = Number(x.minIncrement);
+    if (!isFinite(m) || m <= 0) throw new Error('Increment must be more than 0.');
+    out.minIncrement = m;
+  }
+  return Object.keys(out).length ? out : null;
+}
+function saveRules_(b) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const r = getRules_();
+    if ('defaults' in b) r.defaults = cleanRule_(b.defaults) || {};
+    if (b.lotId) {
+      if (!/^[a-z0-9-]{1,60}$/.test(String(b.lotId))) throw new Error('Unknown artwork.');
+      const rule = cleanRule_(b.rule);
+      if (rule) r.lots[b.lotId] = rule; else delete r.lots[b.lotId];
+    }
+    PropertiesService.getScriptProperties().setProperty('rules', JSON.stringify(r));
+    CacheService.getScriptCache().remove('state');
+    return adminData_();
   } finally {
     lock.releaseLock();
   }

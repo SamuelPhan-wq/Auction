@@ -89,6 +89,7 @@
     base.addEventListener('keydown', function (e) { if (e.key === 'Enter') render(); });
     document.getElementById('show-poster').onchange = function (e) { document.getElementById('poster').classList.toggle('hidden', !e.target.checked); };
     render();
+    A.refresh().then(render); // pick up starting bids set on the admin page
   })();
   </script>
 </body>

@@ -49,6 +49,16 @@
         </div>
       </div>
 
+      <div class="panel" style="margin-bottom:1rem">
+        <h3 style="margin-top:0">Starting bids &amp; increments</h3>
+        <p class="muted small">These apply to every lot unless you set a custom amount for a lot (tap a lot in the table below). Leave a box empty to use the value from <code>config.js</code>.</p>
+        <form class="controls-row" id="defaults-form">
+          <label class="field"><span>Default starting bid</span><div class="amount-wrap"><span class="cur cur-sym"></span><input type="number" name="startingBid" min="0" step="any" inputmode="decimal"></div></label>
+          <label class="field"><span>Default minimum increment</span><div class="amount-wrap"><span class="cur cur-sym"></span><input type="number" name="minIncrement" min="0" step="any" inputmode="decimal"></div></label>
+          <button class="btn secondary" type="submit">Save defaults</button>
+        </form>
+      </div>
+
       <div class="admin-actions">
         <a class="btn sand" href="qr.html" target="_blank">▦ Print QR code labels</a>
         <button class="btn secondary" id="csv-winners">⬇ Winners (CSV)</button>
@@ -108,7 +118,7 @@
     function load(fromLogin) {
       return A.api.post({ action: 'admin', key: KEY }).then(function (res) {
         sessionStorage.setItem('lctw-admin-key', KEY);
-        DATA = res;
+        DATA = res; A.applyRules(res.rules);
         $('login').classList.add('hidden');
         $('dash').classList.remove('hidden');
         draw();
@@ -160,6 +170,7 @@
       $('toggle-closed').className = 'btn ' + (s.closed ? '' : 'danger');
       if (document.activeElement !== $('ends')) $('ends').value = s.endsAt ? toLocalInput(s.endsAt) : '';
       if (DATA.sheetUrl) { $('sheet-link').href = DATA.sheetUrl; $('sheet-link').classList.remove('hidden'); }
+      fillDefaults();
       $('updated').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
 
       const term = $('q').value.trim().toLowerCase();
@@ -187,7 +198,8 @@
         let html = '<tr class="lot-row" data-id="' + A.esc(it.id) + '">' +
           '<td><b>' + A.esc(it.lot) + '</b></td>' +
           '<td>' + (it.image ? '<img src="' + A.esc(A.thumb(it)) + '" alt="" loading="lazy">' : '') + '</td>' +
-          '<td><b>' + A.esc(it.title) + '</b><div class="muted small">Start ' + A.money(it.startingBid) + '</div></td>' +
+          '<td><b>' + A.esc(it.title) + '</b><div class="muted small">Start ' + A.money(it.startingBid) + ' · step ' + A.money(it.minIncrement) +
+            (A.getRules().lots[it.id] ? ' <span class="tag sand">custom</span>' : '') + '</div></td>' +
           '<td class="amt">' + (t ? A.money(t.amount) : '<span class="tag grey">No bids</span>') + '</td>' +
           '<td>' + (t ? A.esc(t.name) + (t.anonymous ? ' <span class="tag grey">anon</span>' : '') + (t.email ? '<div class="muted small">' + A.esc(t.email) + '</div>' : '') : '') + '</td>' +
           '<td>' + (t ? '<a href="tel:' + A.esc(t.phone.replace(/[^\d+]/g, '')) + '" onclick="event.stopPropagation()">' + A.esc(t.phone) + '</a>' : '') + '</td>' +
@@ -206,7 +218,8 @@
                     : '<button class="btn danger small" data-remove="' + A.esc(b.id) + '">Remove</button>') + '</td></tr>';
               }).join('') + '</table>'
             : '<span class="muted">No bids yet.</span>') +
-            ' <a class="small" href="' + A.esc(A.itemUrl(it)) + '" target="_blank">Open public page ↗</a></td></tr>';
+            ' <a class="small" href="' + A.esc(A.itemUrl(it)) + '" target="_blank">Open public page ↗</a>' +
+            lotRuleForm(it) + '</td></tr>';
         }
         return html;
       }).join('') || '<tr><td colspan="8" class="empty">No lots match.</td></tr>';
@@ -220,10 +233,12 @@
         if (rm && !confirm('Remove this bid? The next highest bid becomes the leader. (You can restore it later.)')) return;
         (rm || rs).disabled = true;
         A.api.post({ action: rm ? 'removeBid' : 'restoreBid', key: KEY, bidId: bidId })
-          .then(function (res) { DATA = res; draw(); A.toast(rm ? 'Bid removed' : 'Bid restored'); })
+          .then(function (res) { DATA = res; A.applyRules(res.rules); draw(); A.toast(rm ? 'Bid removed' : 'Bid restored'); })
           .catch(function (err) { alert(err.message); draw(); });
         return;
       }
+      const reset = e.target.closest('[data-reset]');
+      if (reset) { saveRules({ lotId: reset.closest('form').dataset.lot, rule: null }, 'Lot now uses the defaults'); return; }
       const row = e.target.closest('tr.lot-row'); if (!row) return;
       const id = row.dataset.id; open.has(id) ? open.delete(id) : open.add(id); draw();
     });
@@ -238,8 +253,49 @@
     });
     $('q').addEventListener('input', draw);
 
+    // ----- starting bids & increments -----
+    function lotRuleForm(it) {
+      const r = A.getRules().lots[it.id] || {};
+      const v = function (x) { return x != null ? A.esc(x) : ''; };
+      return '<form class="controls-row lot-rule" data-lot="' + A.esc(it.id) + '" style="margin-top:.8rem;padding-top:.8rem;border-top:1px solid var(--border)">' +
+        '<label class="field"><span>Starting bid for this lot <small>(empty = default)</small></span><input type="number" name="startingBid" min="0" step="any" inputmode="decimal" value="' + v(r.startingBid) + '" placeholder="' + A.esc(defaultFor(it, 'startingBid')) + '"></label>' +
+        '<label class="field"><span>Increment for this lot <small>(empty = default)</small></span><input type="number" name="minIncrement" min="0" step="any" inputmode="decimal" value="' + v(r.minIncrement) + '" placeholder="' + A.esc(defaultFor(it, 'minIncrement')) + '"></label>' +
+        '<button class="btn secondary" type="submit">Save for this lot</button>' +
+        (A.getRules().lots[it.id] ? '<button class="btn secondary" type="button" data-reset>Use defaults</button>' : '') +
+        '</form>';
+    }
+    function defaultFor(it, k) {
+      const d = A.getRules().defaults;
+      return d[k] != null ? d[k] : (k === 'startingBid' ? it.baseStartingBid : it.baseMinIncrement);
+    }
+    function saveRules(body, msg) {
+      return A.api.post(Object.assign({ action: 'rules', key: KEY }, body))
+        .then(function (res) { DATA = res; A.applyRules(res.rules); draw(); A.toast(msg); })
+        .catch(function (err) { alert(err.message); });
+    }
+    A.$$('.cur-sym').forEach(function (el) { el.textContent = A.CFG.currencySymbol || ''; });
+    const defForm = $('defaults-form');
+    defForm.elements.startingBid.placeholder = A.CFG.startingBid;
+    defForm.elements.minIncrement.placeholder = A.CFG.minIncrement;
+    function fillDefaults() {
+      const d = A.getRules().defaults;
+      ['startingBid', 'minIncrement'].forEach(function (k) {
+        const el = defForm.elements[k];
+        if (document.activeElement !== el) el.value = d[k] != null ? d[k] : '';
+      });
+    }
+    defForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      saveRules({ defaults: { startingBid: defForm.elements.startingBid.value, minIncrement: defForm.elements.minIncrement.value } }, 'Defaults saved');
+    });
+    $('rows').addEventListener('submit', function (e) {
+      const f = e.target.closest('form.lot-rule'); if (!f) return;
+      e.preventDefault();
+      saveRules({ lotId: f.dataset.lot, rule: { startingBid: f.elements.startingBid.value, minIncrement: f.elements.minIncrement.value } }, 'Saved for this lot');
+    });
+
     function settings(body) {
-      return A.api.post(Object.assign({ action: 'settings', key: KEY }, body)).then(function (res) { DATA = res; draw(); }).catch(function (err) { alert(err.message); });
+      return A.api.post(Object.assign({ action: 'settings', key: KEY }, body)).then(function (res) { DATA = res; A.applyRules(res.rules); draw(); }).catch(function (err) { alert(err.message); });
     }
     $('toggle-closed').onclick = function () {
       const closing = !DATA.settings.closed;

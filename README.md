@@ -70,13 +70,22 @@ Open `https://YOUR-NAME.github.io/lctw-auction/admin.html`, sign in, and click *
 - After closing, click **Winners (CSV)** for the list of who to call and how much they owe.
 - If someone places a joke bid, open that lot in the admin table and click **Remove**.
 
+## Starting bids and increments (from the admin page)
+
+No code editing needed. On the admin page:
+- **Starting bids & increments** panel: sets the default for every lot.
+- **Tap any lot** in the table to give that lot its own starting bid and/or increment. It is marked **custom**. **Use defaults** removes it again.
+
+The server enforces these amounts, and guests' pages update within about 15 seconds. Which amount wins: the lot's own setting → the admin default → `items.js` → `config.js`. Changing a starting bid only matters until the first bid; after that, the increment sets the next minimum.
+
 ---
 
 ## Changing things
 
 | To change… | Edit |
 |---|---|
-| Title, currency, starting bid, minimum increment | `assets/config.js` |
+| Starting bids and increments | **Admin page** (see above) |
+| Title, currency, fallback starting bid and increment | `assets/config.js` |
 | Artwork names, lot numbers, per-item starting bids, descriptions, artist | `assets/items.js` |
 | Colours | top of `assets/styles.css` |
 | Admin password | `ADMIN_PASSWORD` in Code.gs (then deploy a new version) |

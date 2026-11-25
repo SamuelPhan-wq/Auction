@@ -8,6 +8,20 @@
       medium: window.AUCTION_DEFAULT_MEDIUM || '',
     }, it);
   });
+  ITEMS.forEach(function (it) { it.baseStartingBid = it.startingBid; it.baseMinIncrement = it.minIncrement; });
+  let RULES = { defaults: {}, lots: {} };
+
+  // Starting bid / increment: admin per-lot rule > admin default > items.js / config.js
+  function applyRules(rules) {
+    if (!rules) return;
+    RULES = { defaults: rules.defaults || {}, lots: rules.lots || {} };
+    ITEMS.forEach(function (it) {
+      const lot = RULES.lots[it.id] || {};
+      const d = RULES.defaults;
+      it.startingBid = lot.startingBid != null ? lot.startingBid : (d.startingBid != null ? d.startingBid : it.baseStartingBid);
+      it.minIncrement = lot.minIncrement != null ? lot.minIncrement : (d.minIncrement != null ? d.minIncrement : it.baseMinIncrement);
+    });
+  }
   const DEMO = !CFG.apiUrl;
 
   // ---------- small helpers ----------
@@ -65,7 +79,13 @@
 
   const demo = (function () {
     const KEY = 'lctw-auction-demo';
-    function db() { return store(KEY) || { bids: [], settings: { closed: false, endsAt: null } }; }
+    function db() { const d = store(KEY) || { bids: [], settings: { closed: false, endsAt: null } }; d.rules = d.rules || { defaults: {}, lots: {} }; return d; }
+    function cleanRule(x) {
+      if (!x) return null; const o = {};
+      if (x.startingBid !== '' && x.startingBid != null) { if (!(Number(x.startingBid) >= 0)) throw new Error('Starting bid must be 0 or more.'); o.startingBid = Number(x.startingBid); }
+      if (x.minIncrement !== '' && x.minIncrement != null) { if (!(Number(x.minIncrement) > 0)) throw new Error('Increment must be more than 0.'); o.minIncrement = Number(x.minIncrement); }
+      return Object.keys(o).length ? o : null;
+    }
     function save(d) { store(KEY, d); }
     function isClosed(s) { return s.closed || (s.endsAt && Date.now() >= s.endsAt); }
     function shortName(n) { const p = String(n).trim().split(/\s+/); return p.length < 2 ? p[0] : p[0] + ' ' + p[p.length - 1][0].toUpperCase() + '.'; }
@@ -79,9 +99,9 @@
       });
       Object.keys(items).forEach(function (k) { items[k].history.sort(function (a, b) { return b.amount - a.amount; }); items[k].history = items[k].history.slice(0, 8); });
       const s = Object.assign({}, d.settings); s.isClosed = !!isClosed(s);
-      return { ok: true, items: items, settings: s, serverTime: Date.now() };
+      return { ok: true, items: items, settings: s, rules: d.rules, serverTime: Date.now() };
     }
-    function admin() { const d = db(); const s = Object.assign({}, d.settings); s.isClosed = !!isClosed(s); return { ok: true, bids: d.bids, settings: s, serverTime: Date.now() }; }
+    function admin() { const d = db(); const s = Object.assign({}, d.settings); s.isClosed = !!isClosed(s); return { ok: true, bids: d.bids, settings: s, rules: d.rules, serverTime: Date.now() }; }
     function delay(v) { return new Promise(function (res) { setTimeout(function () { res(v); }, 250); }); }
     return {
       state: function () { return delay(state()); },
@@ -91,7 +111,10 @@
           if (b.action === 'bid') {
             if (isClosed(d.settings)) throw new Error('Sorry — bidding has closed.');
             const cur = state().items[b.itemId];
-            const min = cur ? cur.high + Number(b.minIncrement) : Number(b.startingBid);
+            const lr = d.rules.lots[b.itemId] || {}, dr = d.rules.defaults;
+            const start = lr.startingBid != null ? lr.startingBid : dr.startingBid != null ? dr.startingBid : Number(b.startingBid);
+            const inc = lr.minIncrement != null ? lr.minIncrement : dr.minIncrement != null ? dr.minIncrement : Number(b.minIncrement);
+            const min = cur ? cur.high + inc : start;
             if (Number(b.amount) < min) throw new Error('Someone just bid! The minimum bid is now ' + money(min) + '.');
             const id = Math.random().toString(36).slice(2, 10);
             d.bids.push({ id: id, time: Date.now(), itemId: b.itemId, itemTitle: b.itemTitle, amount: Number(b.amount), name: b.name, phone: b.phone, email: b.email || '', anonymous: !!b.anonymous, status: 'active' });
@@ -102,6 +125,11 @@
           if (b.action === 'removeBid' || b.action === 'restoreBid') {
             const bid = d.bids.find(function (x) { return x.id === b.bidId; });
             if (bid) bid.status = b.action === 'removeBid' ? 'removed' : 'active';
+            save(d); return delay(admin());
+          }
+          if (b.action === 'rules') {
+            if ('defaults' in b) d.rules.defaults = cleanRule(b.defaults) || {};
+            if (b.lotId) { const r = cleanRule(b.rule); if (r) d.rules.lots[b.lotId] = r; else delete d.rules.lots[b.lotId]; }
             save(d); return delay(admin());
           }
           if (b.action === 'settings') {
@@ -123,6 +151,7 @@
   const listeners = [];
   function setState(s) {
     STATE = s; clockOffset = (s.serverTime || Date.now()) - Date.now();
+    applyRules(s.rules);
     listeners.forEach(function (fn) { try { fn(STATE); } catch (e) { console.error(e); } });
   }
   function refresh() {
@@ -340,7 +369,7 @@
     CFG: CFG, ITEMS: ITEMS, DEMO: DEMO, api: api,
     $: $, $$: $$, esc: esc, money: money, store: store, toast: toast, timeAgo: timeAgo,
     itemById: itemById, thumb: thumb, full: full, itemUrl: itemUrl, siteBase: siteBase,
-    refresh: refresh, onState: onState, startPolling: startPolling, getState: function () { return STATE; },
+    refresh: refresh, onState: onState, applyRules: applyRules, getRules: function () { return RULES; }, startPolling: startPolling, getState: function () { return STATE; },
     info: info, isClosed: isClosed, myBids: myBids, mountStatus: mountStatus, renderChrome: renderChrome,
     bidFormHtml: bidFormHtml, wireBidForm: wireBidForm, successHtml: successHtml, openBidSheet: openBidSheet, mineTag: mineTag,
   };
