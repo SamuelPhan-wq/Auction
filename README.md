@@ -1,2 +1,108 @@
-# Auction
+# LCTW Silent Auction
 
+A mobile-friendly silent auction website for the Lao Conservation Trust for Wildlife. It is hosted free on **GitHub Pages**, and bids are saved in a **Google Sheet**.
+
+| Page | Who uses it | What it does |
+|---|---|---|
+| `index.html` | Guests | Gallery of every artwork. Search, filter ("No bids yet", "My bids"), sort, and bid from a pop-up. |
+| `item.html?id=…` | Guests (from a QR code) | One artwork: large zoomable photo, current bid, bid form, bid history. |
+| `admin.html` | Admin | Password protected. Totals, every lot's top bidder and phone number, full bid history, remove/restore bids, set an end time, close bidding, download CSVs. |
+| `qr.html` | Admin | Printable QR code label for every artwork, plus a "view all" poster. |
+
+**A bid needs** a name, a phone number and an amount. Email is optional. Bidders can choose to appear as "Anonymous". Phone numbers and emails are never shown publicly; only the admin can see them.
+
+**Also included**
+- Minimum bid enforcement: starting bid, then current bid plus the minimum increment. One-tap buttons fill in suggested amounts.
+- Two people bidding at the same moment can't both win: the server checks again before saving.
+- An "Are you sure?" check on unusually large bids, to catch an extra zero.
+- "You're winning" or "You've been outbid" badges, plus a **My bids** list on each phone.
+- Bidders' details are remembered on their phone so they only type them once.
+- Live updates every 15 seconds, a countdown to the closing time, and bidding locks automatically when time runs out.
+- Admin can remove a joke or mistaken bid, and can restore it later.
+- Winners CSV: lot, winner, phone and amount, ready for collecting payment.
+- LCTW logo, colours and fonts (same as the Staff Requests app), and a dark mode.
+
+---
+
+## 1. Try it now (demo mode)
+
+While `apiUrl` in `assets/config.js` is empty, the site runs in **demo mode**: bids are only saved in your own browser. The admin password in demo mode is `demo`.
+
+Browsers block some features when you double-click a file, so open the site through a small local server instead:
+
+```bash
+cd ~/Documents/GitHub/LCTW/Auction && python3 -m http.server 8000
+```
+
+Then go to http://localhost:8000.
+
+## 2. Set up the Google Sheet (≈10 minutes)
+
+1. Go to [sheets.new](https://sheets.new) and name the sheet **LCTW Auction Bids**.
+2. Open **Extensions → Apps Script**. Delete everything there and paste in the full contents of [`apps-script/Code.gs`](apps-script/Code.gs).
+3. On the line `const ADMIN_PASSWORD = 'change-me-please';`, change the password. Click **Save** 💾.
+4. Click **Deploy → New deployment**. Click the ⚙️ next to "Select type" and choose **Web app**.
+   - *Execute as:* **Me**
+   - *Who has access:* **Anyone**
+5. Click **Deploy**, then **Authorize access**. Choose your Google account. If you see *"Google hasn't verified this app"*, click **Advanced → Go to … (unsafe)**. It is your own script.
+6. Copy the **Web app URL** (it ends in `/exec`).
+7. Open `assets/config.js` and paste it in: `apiUrl: "https://script.google.com/macros/s/…/exec",`
+
+A **Bids** tab appears in the sheet after the first bid. You can watch bids arrive there live.
+
+> When you edit `Code.gs` later, go to **Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy**. This keeps the same URL.
+
+## 3. Put it on GitHub Pages
+
+1. Create a new repository on GitHub, for example `lctw-auction`. It can be public: no private data is stored in the site files.
+2. Upload or push everything in this folder. `.gitignore` leaves out the large original photos, which the site doesn't need.
+3. In the repository, go to **Settings → Pages → Source: Deploy from a branch → `main` / root → Save**.
+4. After about a minute the site will be live at `https://YOUR-NAME.github.io/lctw-auction/`.
+5. Put that address in `siteUrl` in `assets/config.js` and push again. This makes sure the QR codes always point to the live site.
+
+## 4. Print the QR codes
+
+Open `https://YOUR-NAME.github.io/lctw-auction/admin.html`, sign in, and click **Print QR code labels**. Two labels fit across an A4 or Letter page. **Scan a couple with your phone before the event.**
+
+## 5. On the night
+
+- **Set the end time** in the admin dashboard. Bidding closes by itself at that time, or you can click **Close bidding now**.
+- After closing, click **Winners (CSV)** for the list of who to call and how much they owe.
+- If someone places a joke bid, open that lot in the admin table and click **Remove**.
+
+---
+
+## Changing things
+
+| To change… | Edit |
+|---|---|
+| Title, currency, starting bid, minimum increment | `assets/config.js` |
+| Artwork names, lot numbers, per-item starting bids, descriptions, artist | `assets/items.js` |
+| Colours | top of `assets/styles.css` |
+| Admin password | `ADMIN_PASSWORD` in Code.gs (then deploy a new version) |
+
+**Adding a new artwork:** resize the photo (about 1400px wide for `images/full/`, 560px for `images/thumb/`). On a Mac:
+
+```bash
+sips -Z 1400 -s formatOptions 62 "photo.jpg" --out images/full/new-id.jpg && sips -Z 560 -s formatOptions 60 "photo.jpg" --out images/thumb/new-id.jpg
+```
+
+Then add a line to `assets/items.js`.
+
+> ⚠️ Don't change an artwork's `id` after QR codes are printed or bids have started. The QR codes and the saved bids both use it.
+
+## Files
+
+```
+index.html        gallery (view all + bid)
+item.html         single artwork page (QR target)
+admin.html        admin dashboard
+qr.html           printable QR labels
+assets/config.js  settings  ← edit me
+assets/items.js   artwork list  ← edit me
+assets/app.js     shared logic
+assets/styles.css LCTW styling
+images/full/      large photos
+images/thumb/     gallery thumbnails
+apps-script/Code.gs  Google Sheets backend (paste into Apps Script)
+```
