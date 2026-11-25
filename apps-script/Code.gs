@@ -10,7 +10,7 @@
  * When you change this code later: Deploy → Manage deployments → Edit → Version: New version.
  */
 
-const ADMIN_PASSWORD = 'LCTW2018';   // <-- CHANGE THIS
+const ADMIN_PASSWORD = 'change-me-please';   // <-- CHANGE THIS in the Apps Script editor only — never commit your real password
 const SHEET_NAME = 'Bids';
 const HEADERS = ['Bid ID', 'Time', 'Lot ID', 'Lot title', 'Amount', 'Name', 'Phone', 'Email', 'Anonymous', 'Status'];
 const HISTORY_LENGTH = 8;
