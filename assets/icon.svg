@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1c7a66"/>
+      <stop offset="1" stop-color="#0f4a3e"/>
+    </linearGradient>
+    <linearGradient id="leaf" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#91c9b5"/>
+      <stop offset="1" stop-color="#e2f1ea"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- gold picture frame -->
+  <rect x="104" y="96" width="304" height="320" rx="26" fill="#f4ecdf" stroke="#c9a36b" stroke-width="22"/>
+  <rect x="134" y="126" width="244" height="260" rx="12" fill="#0f4a3e"/>
+  <!-- pandan leaf -->
+  <path d="M160 360 C 190 280, 260 190, 352 150 C 330 240, 270 320, 160 360 Z" fill="url(#leaf)"/>
+  <path d="M168 352 C 230 300, 290 230, 344 160" fill="none" stroke="#1c7a66" stroke-width="7" stroke-linecap="round"/>
+  <!-- bid tag -->
+  <circle cx="384" cy="392" r="62" fill="#a9824f" stroke="#ffffff" stroke-width="12"/>
+  <path d="M362 392 l16 16 l30 -32" fill="none" stroke="#ffffff" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

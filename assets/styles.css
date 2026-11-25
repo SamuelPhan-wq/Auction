@@ -223,6 +223,17 @@ input.invalid { border-color: var(--danger); }
 .empty { text-align: center; padding: 3rem 1rem; color: var(--muted); }
 .empty svg { color: var(--mint); margin: 0 auto .6rem; display: block; }
 
+/* ---------- Host (Le Charme Vientiane Hotel) ----------
+   The logo is black on white: "multiply" drops the white on light backgrounds;
+   invert + "screen" turns it white on dark backgrounds. */
+.host { display: flex; align-items: center; gap: .7rem; margin-top: 1rem; }
+.host span, .footer-host span { font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; opacity: .85; }
+.host img { height: 60px; width: auto; filter: invert(1); mix-blend-mode: screen; }
+@media (max-width: 560px) { .host { justify-content: center; } .host img { height: 50px; } }
+.footer-host { display: flex; flex-direction: column; align-items: center; gap: .35rem; margin-bottom: 1rem; }
+.footer-host img { height: 52px; width: auto; mix-blend-mode: multiply; }
+@media (prefers-color-scheme: dark) { .footer-host img { filter: invert(1); mix-blend-mode: screen; opacity: .9; } }
+
 /* ---------- Footer ---------- */
 .footer { text-align: center; color: var(--muted); font-size: .85rem; padding: 1.5rem 16px 2rem; }
 .footer a { color: var(--muted); }
@@ -263,6 +274,7 @@ table.bids tr.removed td { text-decoration: line-through; color: var(--muted); }
   grid-template-columns: 1fr auto; gap: .5rem 1rem; align-items: center; break-inside: avoid; page-break-inside: avoid; }
 .qr-card .qr-head { grid-column: 1 / -1; display: flex; align-items: center; gap: .6rem; border-bottom: 1px solid #e2dfd6; padding-bottom: .5rem; }
 .qr-card .qr-head img { width: 38px; height: 38px; }
+.qr-card .qr-head img.host-logo { width: auto; height: 30px; margin-left: auto; }
 .qr-card .qr-head b { font-family: var(--serif); font-weight: 400; font-size: 1.05rem; color: #0f4a3e; line-height: 1.1; }
 .qr-card .lot { font-weight: 800; color: #a9824f; font-size: .8rem; letter-spacing: .06em; text-transform: uppercase; }
 .qr-card h3 { font-family: var(--serif); font-weight: 400; font-size: 1.6rem; margin: .1rem 0 .3rem; }

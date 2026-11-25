@@ -1,0 +1,13 @@
+{
+  "name": "LCTW Silent Auction",
+  "short_name": "Auction",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#f4f3ee",
+  "theme_color": "#0f4a3e",
+  "icons": [
+    { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "assets/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}
