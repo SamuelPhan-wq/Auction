@@ -103,8 +103,19 @@
       return fetch(CFG.apiUrl + '?action=state&t=' + Date.now()).then(function (r) { return r.json(); }).then(check);
     },
     post: function (body) {
-      return fetch(CFG.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
-        .then(function (r) { return r.json(); }).then(check);
+      function send() {
+        return fetch(CFG.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
+          .then(function (r) { return r.json(); });
+      }
+      if (body.action !== 'bid') return send().then(check);
+      // A bid that could not reach the server (weak signal) is sent once more after a moment. It carries a
+      // requestId, so if the first one did arrive the server just answers "already placed".
+      return send()
+        .catch(function () { return new Promise(function (res) { setTimeout(res, 900); }).then(send); })
+        .catch(function () {
+          throw new Error('Could not reach the auction. Check your connection. Your bid may not have gone through, so look at the bid history before trying again.');
+        })
+        .then(check);
     },
   };
   function check(res) { if (!res || !res.ok) throw new Error((res && res.error) || 'Something went wrong. Please try again.'); return res; }
@@ -231,7 +242,9 @@
       if (!READY && !GAVE_UP) { GAVE_UP = true; listeners.forEach(function (fn) { try { fn(STATE); } catch (e) { console.error(e); } }); }
     }, 7000);
     const every = Math.max(5, CFG.refreshSeconds || 15) * 1000;
-    setInterval(function () { if (!document.hidden) refresh(); }, every);
+    (function loop() {
+      setTimeout(function () { if (!document.hidden) refresh(); loop(); }, every * (0.8 + Math.random() * 0.4));
+    })();
     document.addEventListener('visibilitychange', function () { if (!document.hidden) refresh(); });
   }
   function now() { return Date.now() + clockOffset; }
@@ -394,7 +407,7 @@
       else store('lctw-auction-me', null);
 
       submitting = true; btn.disabled = true; btn.textContent = 'Placing bid…';
-      api.post(Object.assign({ action: 'bid', itemId: it.id, itemTitle: 'Lot ' + it.lot + ' — ' + it.title, startingBid: it.startingBid, minIncrement: it.minIncrement }, data))
+      api.post(Object.assign({ action: 'bid', requestId: Math.random().toString(36).slice(2, 10) + Date.now().toString(36), itemId: it.id, itemTitle: 'Lot ' + it.lot + ' — ' + it.title, startingBid: it.startingBid, minIncrement: it.minIncrement }, data))
         .then(function (res) {
           rememberBid(it.id, data.amount, res.bidId);
           if (res.state) setState(res.state);

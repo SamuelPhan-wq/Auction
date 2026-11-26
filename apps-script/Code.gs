@@ -17,9 +17,17 @@ const ADMIN_PASSWORD = 'change-me-please';
 const SHEET_NAME = 'Bids';
 const HEADERS = ['Bid ID', 'Time', 'Lot ID', 'Lot title', 'Amount', 'Name', 'Phone', 'Email', 'Anonymous', 'Status'];
 const HISTORY_LENGTH = 8;
+// Bids that REACH the server up to this many seconds after the closing time are still accepted. It
+// absorbs slow phone networks and the queue of last-second bids (Apps Script handles them one by one).
+const CLOSE_GRACE_SECONDS = 5;
+// How long a guest-facing snapshot is reused. Any change (bid, admin action) clears it immediately.
+const STATE_CACHE_SECONDS = 20;
+// Sheet rows read once per request instead of several times
+let BIDS_MEMO = null;
 
 // ---------- HTTP entry points ----------
 function doGet(e) {
+  BIDS_MEMO = null;
   const action = (e && e.parameter && e.parameter.action) || 'state';
   try {
     if (action === 'state') return json_(publicState_());
@@ -30,12 +38,14 @@ function doGet(e) {
 }
 
 function doPost(e) {
+  const receivedAt = Date.now();   // when the request arrived, before waiting in the bid queue
+  BIDS_MEMO = null;
   let body = {};
   try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}'); }
   catch (_) { return json_({ ok: false, error: 'Bad request' }); }
   try {
     switch (body.action) {
-      case 'bid':        return json_(placeBid_(body));
+      case 'bid':        return json_(placeBid_(body, receivedAt));
       case 'admin':      requireAdmin_(body); return json_(adminData_());
       case 'removeBid':  requireAdmin_(body); return json_(setBidStatus_(body.bidId, 'removed'));
       case 'restoreBid': requireAdmin_(body); return json_(setBidStatus_(body.bidId, 'active'));
@@ -53,7 +63,7 @@ function doPost(e) {
 }
 
 // ---------- Bidding ----------
-function placeBid_(b) {
+function placeBid_(b, receivedAt) {
   const itemId = String(b.itemId || '').trim();
   const itemTitle = clean_(b.itemTitle, 120);
   const name = clean_(b.name, 80);
@@ -72,11 +82,20 @@ function placeBid_(b) {
   if (!isFinite(amount) || amount <= 0) throw new Error('Please enter a bid amount.');
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('That email address does not look right.');
 
+  const requestId = String(b.requestId || '').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 40);
   const lock = LockService.getScriptLock();
-  lock.waitLock(15000);
+  try { lock.waitLock(20000); }
+  catch (_) { throw new Error('The auction is very busy right now. Please press Place bid again.'); }
   try {
+    const cache = CacheService.getScriptCache();
+    // A retry of a bid that already went through (e.g. the reply was lost on a weak connection)
+    // must not create a second bid.
+    if (requestId) {
+      const seen = cache.get('req-' + requestId);
+      if (seen) return { ok: true, bidId: seen, state: publicState_(true) };
+    }
     const settings = getSettings_();
-    if (isClosed_(settings)) throw new Error('Sorry — bidding has closed.');
+    if (isClosed_(settings, (receivedAt || Date.now()) - CLOSE_GRACE_SECONDS * 1000)) throw new Error('Sorry — bidding has closed.');
     if (!settings.started) throw new Error('Bidding has not started yet.');
 
     const bids = activeBids_().filter(function (r) { return r.itemId === itemId; });
@@ -89,8 +108,13 @@ function placeBid_(b) {
     }
 
     const id = Utilities.getUuid().slice(0, 8);
-    sheet_().appendRow([id, new Date(), itemId, safe_(itemTitle), amount, safe_(name), "'" + phone, safe_(email), anonymous, 'active']);
-    CacheService.getScriptCache().remove('state');
+    const now = new Date();
+    sheet_().appendRow([id, now, itemId, safe_(itemTitle), amount, safe_(name), "'" + phone, safe_(email), anonymous, 'active']);
+    // keep this request's copy of the rows current instead of reading the sheet again
+    if (BIDS_MEMO) BIDS_MEMO.push({ id: id, time: now, itemId: itemId, itemTitle: itemTitle, amount: amount, name: name,
+                                    phone: phone, email: email, anonymous: !!anonymous, status: 'active' });
+    if (requestId) cache.put('req-' + requestId, id, 600);
+    cache.remove('state');
     return { ok: true, bidId: id, state: publicState_(true) };
   } finally {
     lock.releaseLock();
@@ -102,7 +126,12 @@ function publicState_(skipCache) {
   const cache = CacheService.getScriptCache();
   if (!skipCache) {
     const hit = cache.get('state');
-    if (hit) return JSON.parse(hit);
+    if (hit) {
+      const cached = JSON.parse(hit);
+      cached.serverTime = Date.now();                       // clocks/countdowns must never run on old time
+      cached.settings.isClosed = isClosed_(cached.settings);
+      return cached;
+    }
   }
   const items = {};
   activeBids_().forEach(function (r) {
@@ -119,7 +148,7 @@ function publicState_(skipCache) {
   const state = { ok: true, items: items, settings: getSettings_(), rules: getRules_(),
                   order: getOrder_(), lotsLocked: lotsLocked_(), serverTime: Date.now() };
   state.settings.isClosed = isClosed_(state.settings);
-  try { cache.put('state', JSON.stringify(state), 5); } catch (_) {}
+  try { cache.put('state', JSON.stringify(state), STATE_CACHE_SECONDS); } catch (_) {}
   return state;
 }
 
@@ -153,6 +182,7 @@ function setBidStatus_(bidId, status) {
     for (let i = 0; i < ids.length; i++) {
       if (String(ids[i][0]) === String(bidId)) {
         sh.getRange(i + 2, HEADERS.indexOf('Status') + 1).setValue(status);
+        BIDS_MEMO = null;
         CacheService.getScriptCache().remove('state');
         return adminData_();
       }
@@ -245,6 +275,7 @@ function resetAuction_(b) {
     if (sh && sh.getLastRow() > 1) {
       archived = 'Bids archive ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH.mm.ss');
       sh.setName(archived);
+      BIDS_MEMO = null;
     }
     const p = PropertiesService.getScriptProperties();
     p.setProperty('started', '');
@@ -328,7 +359,7 @@ function getSettings_() {
   return { closed: p.getProperty('closed') === 'yes', endsAt: Number(p.getProperty('endsAt')) || null, started: started_(),
            resetAt: Number(p.getProperty('resetAt')) || null };
 }
-function isClosed_(s) { return s.closed || (s.endsAt && Date.now() >= s.endsAt); }
+function isClosed_(s, at) { return s.closed || (s.endsAt && (at || Date.now()) >= s.endsAt); }
 
 function sheet_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -343,13 +374,15 @@ function sheet_() {
 }
 
 function allBids_() {
+  if (BIDS_MEMO) return BIDS_MEMO;
   const sh = sheet_();
-  if (sh.getLastRow() < 2) return [];
-  return sh.getRange(2, 1, sh.getLastRow() - 1, HEADERS.length).getValues().map(function (v) {
+  if (sh.getLastRow() < 2) return (BIDS_MEMO = []);
+  BIDS_MEMO = sh.getRange(2, 1, sh.getLastRow() - 1, HEADERS.length).getValues().map(function (v) {
     return { id: String(v[0]), time: new Date(v[1]), itemId: String(v[2]), itemTitle: String(v[3]),
              amount: Number(v[4]) || 0, name: String(v[5]), phone: String(v[6]), email: String(v[7]),
              anonymous: String(v[8]) === 'yes', status: String(v[9] || 'active') };
   });
+  return BIDS_MEMO;
 }
 function activeBids_() { return allBids_().filter(function (r) { return r.status !== 'removed'; }); }
 
