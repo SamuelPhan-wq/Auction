@@ -207,27 +207,17 @@
   let STATE = { items: {}, settings: {}, serverTime: Date.now() };
   let clockOffset = 0;
   const listeners = [];
-  // The lot order, names and starting bids come from the server, so a page must not draw before it
-  // knows them (it would show the original order and then jump). READY becomes true when fresh data
-  // arrives, or immediately when the last known data is saved on this device (shown while refreshing).
+  // The lot order, names, prices and whether bidding is open all come from the server. A page must not
+  // draw them before the real answer arrives, or it would show the original order / "Bidding is open"
+  // and then jump. Nothing is cached on the device for this reason: a saved "open" could be out of date.
+  // READY becomes true when fresh data arrives. If the server can't be reached for a few seconds, the
+  // page is shown anyway (GAVE_UP) with a notice.
   let READY = false, GAVE_UP = false;
-  const CACHE_KEY = 'lctw-auction-cache';
-  function saveCache(s) {
-    store(CACHE_KEY, { api: CFG.apiUrl || 'demo', offset: clockOffset, state: s });
-  }
-  function loadCache() {
-    const c = store(CACHE_KEY);
-    if (!c || c.api !== (CFG.apiUrl || 'demo') || !c.state) return;
-    STATE = c.state; clockOffset = c.offset || 0;
-    applyData(STATE);
-    READY = true;
-  }
   function ready() { return READY || GAVE_UP; }
   function setState(s) {
     STATE = s; clockOffset = (s.serverTime || Date.now()) - Date.now();
     applyData(s);
     READY = true;
-    saveCache(s);
     listeners.forEach(function (fn) { try { fn(STATE); } catch (e) { console.error(e); } });
   }
   function refresh() {
@@ -245,7 +235,6 @@
     document.addEventListener('visibilitychange', function () { if (!document.hidden) refresh(); });
   }
   function now() { return Date.now() + clockOffset; }
-  loadCache();
 
   function info(it) {
     const s = (STATE.items && STATE.items[it.id]) || { high: 0, highName: '', count: 0, history: [] };
@@ -282,7 +271,10 @@
   // ---------- countdown / status text ----------
   function statusText() {
     const st = STATE.settings || {};
-    if (!ready()) return { closed: false, text: 'Checking bidding status…' };
+    if (!READY) {
+      return GAVE_UP ? { closed: true, text: 'Can’t reach the auction right now — check your connection' }
+                     : { closed: false, text: 'Checking bidding status…' };
+    }
     if (isClosed()) return { closed: true, text: 'Bidding has closed — thank you!' };
     if (notStarted()) return { closed: true, text: 'Bidding has not started yet' };
     if (!st.endsAt) return { closed: false, text: 'Bidding is open' };
