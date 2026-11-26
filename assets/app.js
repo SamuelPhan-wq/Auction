@@ -207,9 +207,27 @@
   let STATE = { items: {}, settings: {}, serverTime: Date.now() };
   let clockOffset = 0;
   const listeners = [];
+  // The lot order, names and starting bids come from the server, so a page must not draw before it
+  // knows them (it would show the original order and then jump). READY becomes true when fresh data
+  // arrives, or immediately when the last known data is saved on this device (shown while refreshing).
+  let READY = false, GAVE_UP = false;
+  const CACHE_KEY = 'lctw-auction-cache';
+  function saveCache(s) {
+    store(CACHE_KEY, { api: CFG.apiUrl || 'demo', offset: clockOffset, state: s });
+  }
+  function loadCache() {
+    const c = store(CACHE_KEY);
+    if (!c || c.api !== (CFG.apiUrl || 'demo') || !c.state) return;
+    STATE = c.state; clockOffset = c.offset || 0;
+    applyData(STATE);
+    READY = true;
+  }
+  function ready() { return READY || GAVE_UP; }
   function setState(s) {
     STATE = s; clockOffset = (s.serverTime || Date.now()) - Date.now();
     applyData(s);
+    READY = true;
+    saveCache(s);
     listeners.forEach(function (fn) { try { fn(STATE); } catch (e) { console.error(e); } });
   }
   function refresh() {
@@ -218,11 +236,16 @@
   function onState(fn) { listeners.push(fn); }
   function startPolling() {
     refresh();
+    // If the server can't be reached, show the page anyway after a few seconds (with the original order)
+    setTimeout(function () {
+      if (!READY && !GAVE_UP) { GAVE_UP = true; listeners.forEach(function (fn) { try { fn(STATE); } catch (e) { console.error(e); } }); }
+    }, 7000);
     const every = Math.max(5, CFG.refreshSeconds || 15) * 1000;
     setInterval(function () { if (!document.hidden) refresh(); }, every);
     document.addEventListener('visibilitychange', function () { if (!document.hidden) refresh(); });
   }
   function now() { return Date.now() + clockOffset; }
+  loadCache();
 
   function info(it) {
     const s = (STATE.items && STATE.items[it.id]) || { high: 0, highName: '', count: 0, history: [] };
@@ -259,6 +282,7 @@
   // ---------- countdown / status text ----------
   function statusText() {
     const st = STATE.settings || {};
+    if (!ready()) return { closed: false, text: 'Checking bidding status…' };
     if (isClosed()) return { closed: true, text: 'Bidding has closed — thank you!' };
     if (notStarted()) return { closed: true, text: 'Bidding has not started yet' };
     if (!st.endsAt) return { closed: false, text: 'Bidding is open' };
@@ -442,7 +466,7 @@
     CFG: CFG, ITEMS: ITEMS, DEMO: DEMO, api: api,
     $: $, $$: $$, esc: esc, money: money, store: store, toast: toast, timeAgo: timeAgo,
     itemById: itemById, thumb: thumb, full: full, itemUrl: itemUrl, siteBase: siteBase,
-    refresh: refresh, onState: onState, applyRules: applyRules, applyData: applyData, lotsLocked: function () { return LOTS_LOCKED; }, getOrder: function () { return ORDER.slice(); }, getRules: function () { return RULES; }, startPolling: startPolling, getState: function () { return STATE; },
+    refresh: refresh, onState: onState, ready: ready, applyRules: applyRules, applyData: applyData, lotsLocked: function () { return LOTS_LOCKED; }, getOrder: function () { return ORDER.slice(); }, getRules: function () { return RULES; }, startPolling: startPolling, getState: function () { return STATE; },
     info: info, isClosed: isClosed, notStarted: notStarted, myBids: myBids, mountStatus: mountStatus, renderChrome: renderChrome,
     bidFormHtml: bidFormHtml, wireBidForm: wireBidForm, successHtml: successHtml, openBidSheet: openBidSheet, mineTag: mineTag,
   };
