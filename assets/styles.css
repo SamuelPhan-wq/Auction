@@ -69,10 +69,22 @@ p { margin: 0 0 .75rem; }
 .brand { display: flex; align-items: center; gap: .6rem; color: #fff; text-decoration: none; min-width: 0; }
 .brand img { width: 42px; height: 42px; border-radius: 50%; background: #fff; flex: none; }
 .brand span { font-family: var(--serif); font-size: 1.3rem; line-height: 1.05; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.topnav { display: flex; gap: .25rem; }
-.topnav a { color: #fff; text-decoration: none; font-weight: 700; font-size: .9rem; padding: .5rem .75rem; border-radius: 999px; white-space: nowrap; }
-.topnav a:hover, .topnav a.active { background: rgba(255,255,255,.14); }
-@media (max-width: 520px) { .brand span { font-size: 1.1rem; } .topnav a { padding: .45rem .6rem; font-size: .82rem; } }
+/* Main navigation: two big tabs under the logo */
+.topnav { max-width: 1200px; margin: .55rem auto 0; display: flex; gap: .6rem; }
+.topnav a.tab { flex: 1 1 0; min-height: 48px; display: flex; align-items: center; justify-content: center; gap: .5rem;
+  color: #fff; text-decoration: none; font-weight: 800; font-size: 1.05rem; border-radius: 14px; white-space: nowrap;
+  background: rgba(255,255,255,.1); border: 2px solid rgba(255,255,255,.4); transition: background .15s, color .15s; }
+.topnav a.tab:hover { background: rgba(255,255,255,.2); }
+.topnav a.tab.active { background: #fff; color: var(--brand-deep); border-color: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.2); }
+.topnav a.tab:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.tab-badge { min-width: 1.45rem; height: 1.45rem; padding: 0 .45rem; border-radius: 999px; background: var(--sand); color: #fff;
+  font-size: .8rem; font-weight: 800; display: inline-grid; place-items: center; line-height: 1; }
+.tab-badge[hidden] { display: none; }
+.tab-badge.outbid { background: #d64535; }
+.topnav a.tab.active .tab-badge { background: var(--brand-deep); }
+.topnav a.tab.active .tab-badge.outbid { background: #d64535; }
+@media (min-width: 700px) { .topnav a.tab { flex: 0 0 auto; min-width: 190px; } }
+@media (max-width: 520px) { .brand span { font-size: 1.1rem; } .brand img { width: 36px; height: 36px; } .topnav a.tab { font-size: 1rem; } }
 
 .page { max-width: 1200px; margin: 0 auto; padding: 20px 16px calc(40px + env(safe-area-inset-bottom)); }
 

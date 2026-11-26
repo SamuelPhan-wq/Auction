@@ -316,12 +316,28 @@
     top.innerHTML =
       '<div class="topbar-inner">' +
       '<a class="brand" href="index.html"><img src="assets/lctw-logo.png" alt="LCTW logo"><span>LCTW Silent Auction</span></a>' +
-      '<div class="spacer"></div>' +
-      '<nav class="topnav">' +
-      '<a href="index.html"' + (active === 'gallery' ? ' class="active"' : '') + '>All art</a>' +
-      '<a href="index.html#mine"' + (active === 'mine' ? ' class="active"' : '') + '>My bids</a>' +
-      '</nav></div>';
+      '</div>' +
+      '<nav class="topnav" aria-label="Main">' +
+      '<a class="tab' + (active === 'gallery' ? ' active' : '') + '" href="index.html">' +
+        '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg>' +
+        '<span>All art</span></a>' +
+      '<a class="tab' + (active === 'mine' ? ' active' : '') + '" href="index.html#mine">' +
+        '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg>' +
+        '<span>My bids</span><span class="tab-badge" hidden></span></a>' +
+      '</nav>';
     document.body.prepend(top);
+    // "My bids" shows how many artworks you have bid on; it turns red if someone has outbid you
+    function updateBadge() {
+      const badge = top.querySelector('.tab-badge'); if (!badge) return;
+      const mine = myBids();
+      const bidOn = ITEMS.filter(function (it) { return mine[it.id]; });
+      const outbid = bidOn.filter(function (it) { return info(it).mine === 'outbid'; }).length;
+      badge.hidden = !bidOn.length;
+      badge.textContent = outbid ? '! ' + outbid : String(bidOn.length);
+      badge.classList.toggle('outbid', outbid > 0);
+      badge.title = outbid ? 'You have been outbid on ' + outbid + ' artwork' + (outbid > 1 ? 's' : '') : 'You have bid on ' + bidOn.length + ' artwork' + (bidOn.length > 1 ? 's' : '');
+    }
+    updateBadge(); onState(updateBadge);
     if (DEMO) {
       const b = document.createElement('div');
       b.className = 'demo-banner';
