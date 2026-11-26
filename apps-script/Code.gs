@@ -43,6 +43,7 @@ function doPost(e) {
       case 'rules':      requireAdmin_(body); return json_(saveRules_(body));
       case 'order':      requireAdmin_(body); return json_(saveOrder_(body));
       case 'lockLots':   requireAdmin_(body); return json_(setLotsLocked_(body));
+      case 'start':      requireAdmin_(body); return json_(setStarted_(body));
       default:           return json_({ ok: false, error: 'Unknown action' });
     }
   } catch (err) {
@@ -75,6 +76,7 @@ function placeBid_(b) {
   try {
     const settings = getSettings_();
     if (isClosed_(settings)) throw new Error('Sorry — bidding has closed.');
+    if (!settings.started) throw new Error('Bidding has not started yet.');
 
     const bids = activeBids_().filter(function (r) { return r.itemId === itemId; });
     const high = bids.reduce(function (m, r) { return Math.max(m, r.amount); }, 0);
@@ -221,8 +223,29 @@ function getOrder_() {
     return Array.isArray(o) ? o : [];
   } catch (_) { return []; }
 }
+// Bidding has started when the admin clicked Start bidding, or any bid exists (older auctions).
+function started_() {
+  return PropertiesService.getScriptProperties().getProperty('started') === 'yes' || allBids_().length > 0;
+}
 function lotsLocked_() {
-  return PropertiesService.getScriptProperties().getProperty('lotsLocked') === 'yes' || allBids_().length > 0;
+  return PropertiesService.getScriptProperties().getProperty('lotsLocked') === 'yes' || started_();
+}
+function setStarted_(b) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const p = PropertiesService.getScriptProperties();
+    if (b.started) {
+      p.setProperty('started', 'yes');
+    } else {
+      if (allBids_().length > 0) throw new Error('Bidding cannot be un-started once bids have been placed.');
+      p.setProperty('started', '');
+    }
+    CacheService.getScriptCache().remove('state');
+    return adminData_();
+  } finally {
+    lock.releaseLock();
+  }
 }
 function saveOrder_(b) {
   const lock = LockService.getScriptLock();
@@ -251,7 +274,7 @@ function setLotsLocked_(b) {
     if (b.locked) {
       p.setProperty('lotsLocked', 'yes');
     } else {
-      if (allBids_().length > 0) throw new Error('Lot numbers cannot be unlocked after bidding has started.');
+      if (started_()) throw new Error('Lot numbers cannot be unlocked after bidding has started.');
       p.setProperty('lotsLocked', '');
     }
     CacheService.getScriptCache().remove('state');
@@ -272,7 +295,7 @@ function saveSettings_(b) {
 // ---------- Helpers ----------
 function getSettings_() {
   const p = PropertiesService.getScriptProperties();
-  return { closed: p.getProperty('closed') === 'yes', endsAt: Number(p.getProperty('endsAt')) || null };
+  return { closed: p.getProperty('closed') === 'yes', endsAt: Number(p.getProperty('endsAt')) || null, started: started_() };
 }
 function isClosed_(s) { return s.closed || (s.endsAt && Date.now() >= s.endsAt); }
 

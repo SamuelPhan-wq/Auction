@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Forum&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css?v=9">
+  <link rel="stylesheet" href="assets/styles.css?v=10">
 </head>
 <body>
   <main class="page">
@@ -40,12 +40,20 @@
 
       <div class="stats" id="stats"></div>
 
+      <div class="panel start-panel hidden" id="start-panel" style="margin-bottom:1rem">
+        <h2 style="margin:0 0 .3rem">Bidding has not started</h2>
+        <p style="margin:0 0 .9rem">Guests can look at the artworks, but nobody can bid yet. When you click <b>Start bidding</b>, bidding opens for everyone straight away and the lot numbers are locked.</p>
+        <p class="muted small" style="margin:0 0 .9rem">Before you start: put the artworks in order below, set the closing time, and print the QR labels.</p>
+        <button class="btn" id="start-bidding" style="min-height:54px;font-size:1.15rem;padding:.6rem 1.6rem">▶ Start bidding</button>
+      </div>
+
       <div class="panel" style="margin-bottom:1rem">
         <h3 style="margin-top:0">Auction status: <span id="state-label"></span></h3>
         <div class="controls-row">
           <label class="field"><span>Bidding closes at <small>(your local time — leave empty for no end time)</small></span><input type="datetime-local" id="ends"></label>
           <button class="btn secondary" id="save-ends">Save end time</button>
           <button class="btn" id="toggle-closed"></button>
+          <button class="btn secondary" id="unstart" style="display:none">Undo start</button>
         </div>
       </div>
 
@@ -109,9 +117,9 @@
   </main>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
-  <script src="assets/config.js?v=9"></script>
-  <script src="assets/items.js?v=9"></script>
-  <script src="assets/app.js?v=9"></script>
+  <script src="assets/config.js?v=10"></script>
+  <script src="assets/items.js?v=10"></script>
+  <script src="assets/app.js?v=10"></script>
   <script>
   (function () {
     const A = window.Auction;
@@ -182,7 +190,12 @@
         [bidders.size, 'Bidders'],
       ].map(function (x) { return '<div class="stat"><b>' + x[0] + '</b><span>' + x[1] + '</span></div>'; }).join('');
 
-      $('state-label').innerHTML = s.isClosed ? '<span class="tag bad">Closed</span>' : '<span class="tag ok">Open for bids</span>';
+      const started = s.started !== false;
+      $('start-panel').classList.toggle('hidden', started);
+      $('toggle-closed').style.display = started ? '' : 'none';
+      $('unstart').style.display = (started && !DATA.lockedByBids) ? '' : 'none';
+      $('state-label').innerHTML = !started ? '<span class="tag warn">Not started</span>'
+        : s.isClosed ? '<span class="tag bad">Closed</span>' : '<span class="tag ok">Open for bids</span>';
       $('toggle-closed').textContent = s.closed ? 'Re-open bidding' : 'Close bidding now';
       $('toggle-closed').className = 'btn ' + (s.closed ? '' : 'danger');
       if (document.activeElement !== $('ends')) $('ends').value = s.endsAt ? toLocalInput(s.endsAt) : '';
@@ -314,10 +327,10 @@
       $('order-state').innerHTML = (locked ? '<span class="tag bad">🔒 Locked</span>' : '<span class="tag ok">Unlocked</span>') +
         (dirty ? ' <span class="tag warn">Unsaved changes</span>' : '');
       $('order-help').textContent = locked
-        ? (DATA.lockedByBids
+        ? (DATA.settings.started !== false
             ? 'Bidding has started, so the lot numbers are locked and can no longer be changed.'
-            : 'Lot numbers are locked. You can unlock them until the first bid is placed.')
-        : 'Drag a picture to a new place. The number on each picture is its lot number. On a touch screen, press and hold a picture first, or use the ‹ › buttons. Click Save order when you are happy. Lot numbers lock by themselves when the first bid is placed, so finish this before printing your QR labels.';
+            : 'Lot numbers are locked. You can unlock them until you start bidding.')
+        : 'Drag a picture to a new place. The number on each picture is its lot number. On a touch screen, press and hold a picture first, or use the ‹ › buttons. Click Save order when you are happy. The lot numbers lock when you click Start bidding, so finish this before printing your QR labels.';
       $('order-save').disabled = locked || !dirty;
       $('order-discard').disabled = locked || !dirty;
       $('order-original').disabled = locked;
@@ -325,7 +338,7 @@
       $('order-save').style.display = locked ? 'none' : '';
       $('order-discard').style.display = locked ? 'none' : '';
       const lockBtn = $('order-lock');
-      lockBtn.style.display = (locked && DATA.lockedByBids) ? 'none' : '';
+      lockBtn.style.display = (locked && DATA.settings.started !== false) ? 'none' : '';
       lockBtn.textContent = locked ? 'Unlock lot numbers' : '🔒 Lock lot numbers now';
       lockBtn.className = 'btn ' + (locked ? 'secondary' : 'sand');
     }
@@ -408,6 +421,21 @@
     function settings(body) {
       return A.api.post(Object.assign({ action: 'settings', key: KEY }, body)).then(function (res) { DATA = res; A.applyData(res); draw(); }).catch(function (err) { alert(err.message); });
     }
+    $('start-bidding').onclick = function () {
+      if (isDirty() && !confirm('You have unsaved changes to the lot order. Starting now will throw them away. Start anyway?')) return;
+      if (!confirm('Start bidding now?\n\nBidding opens for everyone straight away, and the lot numbers are locked (the order can no longer be changed).')) return;
+      const btn = $('start-bidding'); btn.disabled = true; btn.textContent = 'Starting…';
+      A.api.post({ action: 'start', key: KEY, started: true })
+        .then(function (res) { DATA = res; A.applyData(res); pending = null; draw(); A.toast('Bidding has started'); })
+        .catch(function (err) { alert(err.message); })
+        .finally(function () { btn.disabled = false; btn.textContent = '▶ Start bidding'; });
+    };
+    $('unstart').onclick = function () {
+      if (!confirm('Undo the start? Nobody can bid until you click Start bidding again. (This is only possible until the first bid is placed.)')) return;
+      A.api.post({ action: 'start', key: KEY, started: false })
+        .then(function (res) { DATA = res; A.applyData(res); draw(); A.toast('Bidding is paused again'); })
+        .catch(function (err) { alert(err.message); });
+    };
     $('toggle-closed').onclick = function () {
       const closing = !DATA.settings.closed;
       if (closing && !confirm('Close bidding now? Nobody will be able to place new bids until you re-open.')) return;

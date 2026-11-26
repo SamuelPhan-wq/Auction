@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Forum&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css?v=9">
+  <link rel="stylesheet" href="assets/styles.css?v=10">
 </head>
 <body>
   <main class="page">
@@ -52,9 +52,9 @@
     <div class="grid" id="grid"></div>
   </main>
 
-  <script src="assets/config.js?v=9"></script>
-  <script src="assets/items.js?v=9"></script>
-  <script src="assets/app.js?v=9"></script>
+  <script src="assets/config.js?v=10"></script>
+  <script src="assets/items.js?v=10"></script>
+  <script src="assets/app.js?v=10"></script>
   <script>
   (function () {
     const A = window.Auction;
@@ -109,7 +109,7 @@
         const it = x.it, i = x.i;
         const priceLabel = i.count ? (closed ? 'Winning bid' : 'Current bid') : 'Starting bid';
         const price = i.count ? i.high : it.startingBid;
-        const meta = i.count ? i.count + ' bid' + (i.count > 1 ? 's' : '') + ' · ' + A.esc(i.highName) : 'Be the first to bid';
+        const meta = i.count ? i.count + ' bid' + (i.count > 1 ? 's' : '') + ' · ' + A.esc(i.highName) : (A.notStarted() ? 'Bidding opens soon' : 'Be the first to bid');
         return '<article class="card">' +
           '<a class="thumb" href="' + A.esc(A.itemUrl(it)) + '"><img loading="lazy" src="' + A.esc(A.thumb(it)) + '" alt="' + A.esc(it.title) + '">' +
           '<span class="lot-badge">LOT ' + A.esc(it.lot) + '</span><span class="mine">' + A.mineTag(i) + '</span></a>' +
@@ -117,7 +117,7 @@
           '<h3><a href="' + A.esc(A.itemUrl(it)) + '">' + A.esc(it.title) + '</a></h3>' +
           '<div class="muted small meta-line">' + meta + '</div>' +
           '<div class="price-row"><span class="price-label">' + priceLabel + '</span><span class="price">' + A.money(price) + '</span></div>' +
-          (closed ? '<a class="btn secondary block" href="' + A.esc(A.itemUrl(it)) + '">View</a>'
+          (closed || A.notStarted() ? '<a class="btn secondary block" href="' + A.esc(A.itemUrl(it)) + '">View</a>'
                   : '<button class="btn block" data-bid="' + A.esc(it.id) + '">Bid' + (i.count ? ' ' + A.money(i.minimum) + '+' : '') + '</button>') +
           '</div></article>';
       }).join('');

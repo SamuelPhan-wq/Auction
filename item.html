@@ -12,16 +12,16 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Forum&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css?v=9">
+  <link rel="stylesheet" href="assets/styles.css?v=10">
 </head>
 <body class="has-sticky">
   <main class="page" id="page"></main>
   <div class="sticky-bid" id="sticky"></div>
   <div class="lightbox" id="lightbox"><img alt=""></div>
 
-  <script src="assets/config.js?v=9"></script>
-  <script src="assets/items.js?v=9"></script>
-  <script src="assets/app.js?v=9"></script>
+  <script src="assets/config.js?v=10"></script>
+  <script src="assets/items.js?v=10"></script>
+  <script src="assets/app.js?v=10"></script>
   <script>
   (function () {
     const A = window.Auction;
@@ -101,13 +101,13 @@
       document.title = it.title + ' — Lot ' + it.lot + ' — LCTW Silent Auction';
       document.getElementById('price-label').textContent = i.count ? (closed ? 'Winning bid' : 'Current bid') : 'Starting bid';
       document.getElementById('price').textContent = A.money(i.count ? i.high : it.startingBid);
-      document.getElementById('price-meta').textContent = i.count ? i.count + ' bid' + (i.count > 1 ? 's' : '') + ' · leader: ' + i.highName : 'No bids yet — be the first!';
+      document.getElementById('price-meta').textContent = i.count ? i.count + ' bid' + (i.count > 1 ? 's' : '') + ' · leader: ' + i.highName : (A.notStarted() ? 'Bidding has not started yet' : 'No bids yet — be the first!');
       document.getElementById('mine').innerHTML = A.mineTag(i);
       document.getElementById('history').innerHTML = i.history.length
         ? i.history.map(function (h) { return '<li><span>' + A.esc(h.name) + ' <span class="muted small">· ' + A.esc(A.timeAgo(h.time)) + '</span></span><b>' + A.money(h.amount) + '</b></li>'; }).join('')
         : '<li class="muted" style="font-weight:600">No bids yet.</li>';
       sticky.innerHTML = '<div><div class="price-label">' + (i.count ? 'Current' : 'Start') + '</div><div class="price" style="font-size:1.4rem">' + A.money(i.count ? i.high : it.startingBid) + '</div></div>' +
-        (closed ? '<button class="btn secondary" disabled>Bidding closed</button>' : '<button class="btn" data-go>Bid ' + A.money(i.minimum) + ' or more</button>');
+        (closed ? '<button class="btn secondary" disabled>Bidding closed</button>' : A.notStarted() ? '<button class="btn secondary" disabled>Bidding not started</button>' : '<button class="btn" data-go>Bid ' + A.money(i.minimum) + ' or more</button>');
     }
     A.onState(draw);
     draw();

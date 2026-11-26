@@ -310,3 +310,7 @@ table.bids tr.removed td { text-decoration: line-through; color: var(--muted); }
 .order-tile.moved { border-color: var(--sand); box-shadow: 0 0 0 2px var(--sand-soft); }
 .order-ghost { opacity: .35; }
 .order-chosen { box-shadow: var(--shadow-lg); }
+
+/* ---------- Admin: Start bidding ---------- */
+.start-panel { border: 2px solid var(--sand); background: var(--sand-soft); }
+@media (prefers-color-scheme: dark) { .start-panel { background: var(--sand-soft); } }

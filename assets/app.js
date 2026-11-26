@@ -112,7 +112,8 @@
   const demo = (function () {
     const KEY = 'lctw-auction-demo';
     function db() { const d = store(KEY) || { bids: [], settings: { closed: false, endsAt: null } }; d.rules = d.rules || { defaults: {}, lots: {} }; d.order = d.order || []; return d; }
-    function locked(d) { return !!d.lotsLocked || d.bids.length > 0; }
+    function started(d) { return !!d.started || d.bids.length > 0; }
+    function locked(d) { return !!d.lotsLocked || started(d); }
     function cleanRule(x) {
       if (!x) return null; const o = {};
       if (x.title && String(x.title).trim()) o.title = String(x.title).trim().slice(0, 120);
@@ -133,10 +134,10 @@
         it.history.push({ amount: b.amount, name: shown, time: b.time, id: b.id });
       });
       Object.keys(items).forEach(function (k) { items[k].history.sort(function (a, b) { return b.amount - a.amount; }); items[k].history = items[k].history.slice(0, 8); });
-      const s = Object.assign({}, d.settings); s.isClosed = !!isClosed(s);
+      const s = Object.assign({}, d.settings); s.isClosed = !!isClosed(s); s.started = started(d);
       return { ok: true, items: items, settings: s, rules: d.rules, order: d.order, lotsLocked: locked(d), serverTime: Date.now() };
     }
-    function admin() { const d = db(); const s = Object.assign({}, d.settings); s.isClosed = !!isClosed(s); return { ok: true, bids: d.bids, settings: s, rules: d.rules, order: d.order, lotsLocked: locked(d), lockedByBids: d.bids.length > 0, serverTime: Date.now() }; }
+    function admin() { const d = db(); const s = Object.assign({}, d.settings); s.isClosed = !!isClosed(s); s.started = started(d); return { ok: true, bids: d.bids, settings: s, rules: d.rules, order: d.order, lotsLocked: locked(d), lockedByBids: d.bids.length > 0, serverTime: Date.now() }; }
     function delay(v) { return new Promise(function (res) { setTimeout(function () { res(v); }, 250); }); }
     return {
       state: function () { return delay(state()); },
@@ -145,6 +146,7 @@
           const d = db();
           if (b.action === 'bid') {
             if (isClosed(d.settings)) throw new Error('Sorry — bidding has closed.');
+            if (!started(d)) throw new Error('Bidding has not started yet.');
             const cur = state().items[b.itemId];
             const lr = d.rules.lots[b.itemId] || {}, dr = d.rules.defaults;
             const start = lr.startingBid != null ? lr.startingBid : dr.startingBid != null ? dr.startingBid : Number(b.startingBid);
@@ -167,9 +169,14 @@
             if (!Array.isArray(b.order)) throw new Error('Bad lot order.');
             d.order = b.order.map(String); save(d); return delay(admin());
           }
+          if (b.action === 'start') {
+            if (b.started) d.started = true;
+            else { if (d.bids.length) throw new Error('Bidding cannot be un-started once bids have been placed.'); d.started = false; }
+            save(d); return delay(admin());
+          }
           if (b.action === 'lockLots') {
             if (b.locked) d.lotsLocked = true;
-            else { if (d.bids.length) throw new Error('Lot numbers cannot be unlocked after bidding has started.'); d.lotsLocked = false; }
+            else { if (started(d)) throw new Error('Lot numbers cannot be unlocked after bidding has started.'); d.lotsLocked = false; }
             save(d); return delay(admin());
           }
           if (b.action === 'rules') {
@@ -223,6 +230,11 @@
     const st = STATE.settings || {};
     return !!(st.closed || (st.endsAt && now() >= st.endsAt));
   }
+  // The admin has not clicked "Start bidding" yet (an older server that doesn't send this counts as started)
+  function notStarted() {
+    const st = STATE.settings || {};
+    return st.started === false;
+  }
 
   // ---------- "my bids" saved on this phone ----------
   function myBids() { return store('lctw-auction-mybids') || {}; }
@@ -235,6 +247,7 @@
   function statusText() {
     const st = STATE.settings || {};
     if (isClosed()) return { closed: true, text: 'Bidding has closed — thank you!' };
+    if (notStarted()) return { closed: true, text: 'Bidding has not started yet' };
     if (!st.endsAt) return { closed: false, text: 'Bidding is open' };
     const ms = st.endsAt - now();
     const d = Math.floor(ms / 86400000), h = Math.floor(ms / 3600000) % 24, m = Math.floor(ms / 60000) % 60, s = Math.floor(ms / 1000) % 60;
@@ -270,7 +283,7 @@
     if (DEMO) {
       const b = document.createElement('div');
       b.className = 'demo-banner';
-      b.innerHTML = '<strong>Demo mode:</strong> bids are only saved on this device. Add your Google Apps Script URL in <code>assets/config.js</code> to go live.';
+      b.innerHTML = '<strong>Demo mode:</strong> bids are only saved on this device. Add your Google Apps Script URL in <code>assets/config.js</code> to go live. To try bidding, open <code>admin.html</code> (password: demo) and click <b>Start bidding</b>.';
       const page = $('.page'); if (page) page.prepend(b);
     }
     const f = document.createElement('footer');
@@ -305,6 +318,7 @@
     const msg = $('.form-msg', form);
     const btn = $('button[type=submit]', form);
 
+    let submitting = false;
     function updateMin() {
       const i = info(it);
       $('.min-note', form).textContent = '(minimum ' + money(i.minimum) + ')';
@@ -314,7 +328,8 @@
       const inc = Number(it.minIncrement);
       const opts = [i.minimum, i.minimum + inc, i.minimum + inc * 3];
       q.innerHTML = opts.map(function (v) { return '<button type="button" class="btn secondary small" data-v="' + v + '">' + money(v) + '</button>'; }).join('');
-      if (isClosed()) { btn.disabled = true; btn.textContent = 'Bidding has closed'; }
+      const blocked = isClosed() ? 'Bidding has closed' : (notStarted() ? 'Bidding has not started yet' : '');
+      if (!submitting) { btn.disabled = !!blocked; btn.textContent = blocked || 'Place bid'; }
     }
     updateMin(); onState(updateMin);
     form.addEventListener('click', function (e) {
@@ -349,7 +364,7 @@
       if (form.elements.remember.checked) store('lctw-auction-me', { name: data.name, phone: data.phone, email: data.email, anonymous: data.anonymous });
       else store('lctw-auction-me', null);
 
-      btn.disabled = true; btn.textContent = 'Placing bid…';
+      submitting = true; btn.disabled = true; btn.textContent = 'Placing bid…';
       api.post(Object.assign({ action: 'bid', itemId: it.id, itemTitle: 'Lot ' + it.lot + ' — ' + it.title, startingBid: it.startingBid, minIncrement: it.minIncrement }, data))
         .then(function (res) {
           rememberBid(it.id, data.amount, res.bidId);
@@ -360,7 +375,7 @@
           msg.innerHTML = '<div class="alert error">' + esc(err.message || 'Could not place bid. Check your connection and try again.') + '</div>';
           refresh();
         })
-        .finally(function () { btn.disabled = false; btn.textContent = 'Place bid'; updateMin(); });
+        .finally(function () { submitting = false; updateMin(); });
     });
   }
 
@@ -415,7 +430,7 @@
     $: $, $$: $$, esc: esc, money: money, store: store, toast: toast, timeAgo: timeAgo,
     itemById: itemById, thumb: thumb, full: full, itemUrl: itemUrl, siteBase: siteBase,
     refresh: refresh, onState: onState, applyRules: applyRules, applyData: applyData, lotsLocked: function () { return LOTS_LOCKED; }, getOrder: function () { return ORDER.slice(); }, getRules: function () { return RULES; }, startPolling: startPolling, getState: function () { return STATE; },
-    info: info, isClosed: isClosed, myBids: myBids, mountStatus: mountStatus, renderChrome: renderChrome,
+    info: info, isClosed: isClosed, notStarted: notStarted, myBids: myBids, mountStatus: mountStatus, renderChrome: renderChrome,
     bidFormHtml: bidFormHtml, wireBidForm: wireBidForm, successHtml: successHtml, openBidSheet: openBidSheet, mineTag: mineTag,
   };
 })();
