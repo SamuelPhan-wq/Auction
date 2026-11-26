@@ -169,6 +169,12 @@
             if (!Array.isArray(b.order)) throw new Error('Bad lot order.');
             d.order = b.order.map(String); save(d); return delay(admin());
           }
+          if (b.action === 'reset') {
+            if (b.confirm !== 'RESET') throw new Error('Type RESET to confirm.');
+            const had = d.bids.length;
+            d.bids = []; d.started = false; d.lotsLocked = false; d.settings.closed = false; d.settings.resetAt = Date.now();
+            save(d); const r = admin(); r.archived = had ? 'demo bids' : ''; return delay(r);
+          }
           if (b.action === 'start') {
             if (b.started) d.started = true;
             else { if (d.bids.length) throw new Error('Bidding cannot be un-started once bids have been placed.'); d.started = false; }
@@ -237,7 +243,14 @@
   }
 
   // ---------- "my bids" saved on this phone ----------
-  function myBids() { return store('lctw-auction-mybids') || {}; }
+  function myBids() {
+    const m = store('lctw-auction-mybids') || {};
+    const reset = (STATE.settings || {}).resetAt;
+    if (!reset) return m;
+    const out = {};
+    Object.keys(m).forEach(function (k) { if ((m[k].time || 0) >= reset) out[k] = m[k]; });
+    return out;
+  }
   function rememberBid(itemId, amount, bidId) {
     const m = myBids(); if (!m[itemId] || amount >= m[itemId].amount) m[itemId] = { amount: amount, bidId: bidId, time: Date.now() };
     store('lctw-auction-mybids', m);

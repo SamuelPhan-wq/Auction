@@ -44,6 +44,7 @@ function doPost(e) {
       case 'order':      requireAdmin_(body); return json_(saveOrder_(body));
       case 'lockLots':   requireAdmin_(body); return json_(setLotsLocked_(body));
       case 'start':      requireAdmin_(body); return json_(setStarted_(body));
+      case 'reset':      requireAdmin_(body); return json_(resetAuction_(body));
       default:           return json_({ ok: false, error: 'Unknown action' });
     }
   } catch (err) {
@@ -230,6 +231,35 @@ function started_() {
 function lotsLocked_() {
   return PropertiesService.getScriptProperties().getProperty('lotsLocked') === 'yes' || started_();
 }
+// Wipes the auction back to "not started" without losing data: the Bids tab is renamed to
+// "Bids archive <date>" and a fresh, empty Bids tab is created. Lot order, names, starting bids
+// and the end time are kept.
+function resetAuction_(b) {
+  if (String(b.confirm || '') !== 'RESET') throw new Error('Type RESET to confirm.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sh = ss.getSheetByName(SHEET_NAME);
+    let archived = '';
+    if (sh && sh.getLastRow() > 1) {
+      archived = 'Bids archive ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH.mm.ss');
+      sh.setName(archived);
+    }
+    const p = PropertiesService.getScriptProperties();
+    p.setProperty('started', '');
+    p.setProperty('lotsLocked', '');
+    p.setProperty('closed', '');
+    p.setProperty('resetAt', String(Date.now()));
+    CacheService.getScriptCache().remove('state');
+    const data = adminData_();
+    data.archived = archived;
+    return data;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function setStarted_(b) {
   const lock = LockService.getScriptLock();
   lock.waitLock(15000);
@@ -295,7 +325,8 @@ function saveSettings_(b) {
 // ---------- Helpers ----------
 function getSettings_() {
   const p = PropertiesService.getScriptProperties();
-  return { closed: p.getProperty('closed') === 'yes', endsAt: Number(p.getProperty('endsAt')) || null, started: started_() };
+  return { closed: p.getProperty('closed') === 'yes', endsAt: Number(p.getProperty('endsAt')) || null, started: started_(),
+           resetAt: Number(p.getProperty('resetAt')) || null };
 }
 function isClosed_(s) { return s.closed || (s.endsAt && Date.now() >= s.endsAt); }
 

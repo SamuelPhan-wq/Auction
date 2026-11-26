@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Forum&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css?v=10">
+  <link rel="stylesheet" href="assets/styles.css?v=11">
 </head>
 <body>
   <main class="page">
@@ -104,7 +104,7 @@
       </div>
 
       <p class="muted small">Tap a row to see its bids and to <b>rename the artwork</b>, add a description, or set its own starting bid. Use <b>Remove</b> to cancel a mistaken or joke bid.</p>
-      <div class="table-wrap">
+      <div class="table-wrap" id="lots-table-wrap">
         <table class="lots">
           <thead><tr>
             <th data-sort="lot">Lot</th><th></th><th data-sort="title">Artwork</th><th data-sort="high">Top bid</th>
@@ -113,13 +113,19 @@
           <tbody id="rows"></tbody>
         </table>
       </div>
+
+      <div class="panel" style="margin-top:1.5rem" id="reset-panel">
+        <h3 style="margin-top:0">Reset the auction</h3>
+        <p class="muted small" style="margin:.3rem 0 .8rem">Use this after a test run, or to start over. It clears all bids and puts the auction back to <b>not started</b> (you'll click Start bidding again). The old bids are <b>not deleted</b>: they are kept in a tab called “Bids archive …” in your Google Sheet. Lot order, names, starting bids and the closing time are kept.</p>
+        <button class="btn danger" id="reset-auction">Reset auction…</button>
+      </div>
     </section>
   </main>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
-  <script src="assets/config.js?v=10"></script>
-  <script src="assets/items.js?v=10"></script>
-  <script src="assets/app.js?v=10"></script>
+  <script src="assets/config.js?v=11"></script>
+  <script src="assets/items.js?v=11"></script>
+  <script src="assets/app.js?v=11"></script>
   <script>
   (function () {
     const A = window.Auction;
@@ -421,6 +427,21 @@
     function settings(body) {
       return A.api.post(Object.assign({ action: 'settings', key: KEY }, body)).then(function (res) { DATA = res; A.applyData(res); draw(); }).catch(function (err) { alert(err.message); });
     }
+    $('reset-auction').onclick = function () {
+      const n = DATA.bids.length;
+      const t = prompt('This clears ALL ' + n + ' bid' + (n === 1 ? '' : 's') + ' and puts the auction back to "not started".\n\nThe old bids are kept in an archive tab in the Google Sheet.\n\nType RESET to continue:');
+      if (t === null) return;
+      if (t.trim() !== 'RESET') { alert('Nothing was reset. You need to type RESET in capital letters.'); return; }
+      const btn = $('reset-auction'); btn.disabled = true; btn.textContent = 'Resetting…';
+      A.api.post({ action: 'reset', key: KEY, confirm: 'RESET' })
+        .then(function (res) {
+          DATA = res; A.applyData(res); pending = null; open.clear(); draw();
+          A.toast('Auction reset');
+          if (res.archived) alert('Done. The old bids are saved in the Google Sheet tab:\n\n' + res.archived);
+        })
+        .catch(function (err) { alert(err.message); })
+        .finally(function () { btn.disabled = false; btn.textContent = 'Reset auction…'; });
+    };
     $('start-bidding').onclick = function () {
       if (isDirty() && !confirm('You have unsaved changes to the lot order. Starting now will throw them away. Start anyway?')) return;
       if (!confirm('Start bidding now?\n\nBidding opens for everyone straight away, and the lot numbers are locked (the order can no longer be changed).')) return;

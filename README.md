@@ -66,6 +66,7 @@ A **Bids** tab appears in the sheet after the first bid. You can watch bids arri
 
 ## 5. On the night
 
+- **Reset after a test run:** at the bottom of the admin page, **Reset auction…** clears all bids and returns to "not started" (you must type RESET to confirm). Nothing is lost: the old bids are kept in a tab named "Bids archive …" in your Google Sheet. Lot order, names, starting bids and the closing time are kept, and test bidders' phones forget their old bids.
 - **Start bidding:** until you click **▶ Start bidding** at the top of the admin page, guests can browse the artworks but nobody can bid (the pages say "Bidding has not started yet"). Clicking it opens bidding for everyone and **locks the lot numbers**. Do your lot ordering, end time and QR printing first. If you click it by mistake, **Undo start** works until the first bid arrives.
 - **Set the end time** in the admin dashboard. Bidding closes by itself at that time, or you can click **Close bidding now**.
 - After closing, click **Winners (CSV)** for the list of who to call and how much they owe.
