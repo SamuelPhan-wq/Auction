@@ -11,8 +11,29 @@
   ITEMS.forEach(function (it) {
     it.baseStartingBid = it.startingBid; it.baseMinIncrement = it.minIncrement;
     it.baseTitle = it.title; it.baseDescription = it.description || '';
+    it.baseLot = it.lot;
   });
   let RULES = { defaults: {}, lots: {} };
+  let ORDER = [];
+  let LOTS_LOCKED = false;
+  ITEMS.sort(function (a, b) { return a.baseLot - b.baseLot; });
+
+  // Lot numbers: the admin's drag-and-drop order (a list of ids) wins; lots not in the list
+  // keep their items.js order after the listed ones. ITEMS is kept sorted by lot number.
+  function lotOrderFor(order) {
+    const known = {}; ITEMS.forEach(function (it) { known[it.id] = true; });
+    const seen = {}; const out = [];
+    (order || []).forEach(function (id) { if (known[id] && !seen[id]) { seen[id] = true; out.push(id); } });
+    ITEMS.slice().sort(function (a, b) { return a.baseLot - b.baseLot; }).forEach(function (it) { if (!seen[it.id]) out.push(it.id); });
+    return out;
+  }
+  function applyOrder(order, locked) {
+    ORDER = Array.isArray(order) ? order : [];
+    if (locked != null) LOTS_LOCKED = !!locked;
+    const ids = lotOrderFor(ORDER);
+    ITEMS.forEach(function (it) { it.lot = ids.indexOf(it.id) + 1; });
+    ITEMS.sort(function (a, b) { return a.lot - b.lot; });
+  }
 
   // Starting bid / increment: admin per-lot rule > admin default > items.js / config.js
   function applyRules(rules) {
@@ -26,6 +47,12 @@
       it.title = lot.title || it.baseTitle;
       it.description = lot.description || it.baseDescription;
     });
+  }
+  // One call for everything the server sends: rules (names, bids) + lot order + lock state
+  function applyData(res) {
+    if (!res) return;
+    applyRules(res.rules);
+    applyOrder(res.order, res.lotsLocked);
   }
   const DEMO = !CFG.apiUrl;
 
@@ -84,7 +111,8 @@
 
   const demo = (function () {
     const KEY = 'lctw-auction-demo';
-    function db() { const d = store(KEY) || { bids: [], settings: { closed: false, endsAt: null } }; d.rules = d.rules || { defaults: {}, lots: {} }; return d; }
+    function db() { const d = store(KEY) || { bids: [], settings: { closed: false, endsAt: null } }; d.rules = d.rules || { defaults: {}, lots: {} }; d.order = d.order || []; return d; }
+    function locked(d) { return !!d.lotsLocked || d.bids.length > 0; }
     function cleanRule(x) {
       if (!x) return null; const o = {};
       if (x.title && String(x.title).trim()) o.title = String(x.title).trim().slice(0, 120);
@@ -106,9 +134,9 @@
       });
       Object.keys(items).forEach(function (k) { items[k].history.sort(function (a, b) { return b.amount - a.amount; }); items[k].history = items[k].history.slice(0, 8); });
       const s = Object.assign({}, d.settings); s.isClosed = !!isClosed(s);
-      return { ok: true, items: items, settings: s, rules: d.rules, serverTime: Date.now() };
+      return { ok: true, items: items, settings: s, rules: d.rules, order: d.order, lotsLocked: locked(d), serverTime: Date.now() };
     }
-    function admin() { const d = db(); const s = Object.assign({}, d.settings); s.isClosed = !!isClosed(s); return { ok: true, bids: d.bids, settings: s, rules: d.rules, serverTime: Date.now() }; }
+    function admin() { const d = db(); const s = Object.assign({}, d.settings); s.isClosed = !!isClosed(s); return { ok: true, bids: d.bids, settings: s, rules: d.rules, order: d.order, lotsLocked: locked(d), lockedByBids: d.bids.length > 0, serverTime: Date.now() }; }
     function delay(v) { return new Promise(function (res) { setTimeout(function () { res(v); }, 250); }); }
     return {
       state: function () { return delay(state()); },
@@ -132,6 +160,16 @@
           if (b.action === 'removeBid' || b.action === 'restoreBid') {
             const bid = d.bids.find(function (x) { return x.id === b.bidId; });
             if (bid) bid.status = b.action === 'removeBid' ? 'removed' : 'active';
+            save(d); return delay(admin());
+          }
+          if (b.action === 'order') {
+            if (locked(d)) throw new Error('Lot numbers are locked, so they cannot be changed now.');
+            if (!Array.isArray(b.order)) throw new Error('Bad lot order.');
+            d.order = b.order.map(String); save(d); return delay(admin());
+          }
+          if (b.action === 'lockLots') {
+            if (b.locked) d.lotsLocked = true;
+            else { if (d.bids.length) throw new Error('Lot numbers cannot be unlocked after bidding has started.'); d.lotsLocked = false; }
             save(d); return delay(admin());
           }
           if (b.action === 'rules') {
@@ -158,7 +196,7 @@
   const listeners = [];
   function setState(s) {
     STATE = s; clockOffset = (s.serverTime || Date.now()) - Date.now();
-    applyRules(s.rules);
+    applyData(s);
     listeners.forEach(function (fn) { try { fn(STATE); } catch (e) { console.error(e); } });
   }
   function refresh() {
@@ -376,7 +414,7 @@
     CFG: CFG, ITEMS: ITEMS, DEMO: DEMO, api: api,
     $: $, $$: $$, esc: esc, money: money, store: store, toast: toast, timeAgo: timeAgo,
     itemById: itemById, thumb: thumb, full: full, itemUrl: itemUrl, siteBase: siteBase,
-    refresh: refresh, onState: onState, applyRules: applyRules, getRules: function () { return RULES; }, startPolling: startPolling, getState: function () { return STATE; },
+    refresh: refresh, onState: onState, applyRules: applyRules, applyData: applyData, lotsLocked: function () { return LOTS_LOCKED; }, getOrder: function () { return ORDER.slice(); }, getRules: function () { return RULES; }, startPolling: startPolling, getState: function () { return STATE; },
     info: info, isClosed: isClosed, myBids: myBids, mountStatus: mountStatus, renderChrome: renderChrome,
     bidFormHtml: bidFormHtml, wireBidForm: wireBidForm, successHtml: successHtml, openBidSheet: openBidSheet, mineTag: mineTag,
   };

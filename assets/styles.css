@@ -293,3 +293,20 @@ table.bids tr.removed td { text-decoration: line-through; color: var(--muted); }
   .qr-grid { grid-template-columns: 1fr 1fr; gap: 6mm; }
   .qr-poster { page-break-after: always; border: 0; }
 }
+
+/* ---------- Admin: drag-and-drop lot order ---------- */
+.order-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: .6rem; }
+.order-tile { position: relative; background: var(--surface); border: 2px solid var(--border); border-radius: var(--radius-sm);
+  overflow: hidden; cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.order-grid.locked .order-tile { cursor: default; }
+.order-tile img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; pointer-events: none; background: var(--surface-2); }
+.order-num { position: absolute; top: .3rem; left: .3rem; min-width: 1.9rem; height: 1.9rem; padding: 0 .4rem; border-radius: 999px;
+  background: var(--brand-night); color: #fff; font-weight: 800; font-size: .85rem; display: grid; place-items: center; }
+.order-name { display: block; padding: .3rem .4rem .4rem; font-size: .72rem; font-weight: 700; line-height: 1.2; min-height: 2.5em;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.order-btns { position: absolute; top: .3rem; right: .3rem; display: flex; gap: .2rem; }
+.order-btns button { width: 1.7rem; height: 1.7rem; border-radius: 50%; border: 0; background: rgba(255,255,255,.92); color: #151c30;
+  font-size: 1.1rem; line-height: 1; font-weight: 800; cursor: pointer; padding: 0; }
+.order-tile.moved { border-color: var(--sand); box-shadow: 0 0 0 2px var(--sand-soft); }
+.order-ghost { opacity: .35; }
+.order-chosen { box-shadow: var(--shadow-lg); }

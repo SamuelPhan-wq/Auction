@@ -41,6 +41,8 @@ function doPost(e) {
       case 'restoreBid': requireAdmin_(body); return json_(setBidStatus_(body.bidId, 'active'));
       case 'settings':   requireAdmin_(body); return json_(saveSettings_(body));
       case 'rules':      requireAdmin_(body); return json_(saveRules_(body));
+      case 'order':      requireAdmin_(body); return json_(saveOrder_(body));
+      case 'lockLots':   requireAdmin_(body); return json_(setLotsLocked_(body));
       default:           return json_({ ok: false, error: 'Unknown action' });
     }
   } catch (err) {
@@ -111,7 +113,8 @@ function publicState_(skipCache) {
     items[k].history.sort(function (a, b) { return b.amount - a.amount; });
     items[k].history = items[k].history.slice(0, HISTORY_LENGTH);
   });
-  const state = { ok: true, items: items, settings: getSettings_(), rules: getRules_(), serverTime: Date.now() };
+  const state = { ok: true, items: items, settings: getSettings_(), rules: getRules_(),
+                  order: getOrder_(), lotsLocked: lotsLocked_(), serverTime: Date.now() };
   state.settings.isClosed = isClosed_(state.settings);
   try { cache.put('state', JSON.stringify(state), 5); } catch (_) {}
   return state;
@@ -133,7 +136,8 @@ function adminData_() {
   });
   const settings = getSettings_();
   settings.isClosed = isClosed_(settings);
-  return { ok: true, bids: rows, settings: settings, rules: getRules_(), serverTime: Date.now(),
+  return { ok: true, bids: rows, settings: settings, rules: getRules_(), order: getOrder_(), lotsLocked: lotsLocked_(),
+           lockedByBids: allBids_().length > 0, serverTime: Date.now(),
            sheetUrl: SpreadsheetApp.getActiveSpreadsheet().getUrl() };
 }
 
@@ -201,6 +205,55 @@ function saveRules_(b) {
       if (rule) r.lots[b.lotId] = rule; else delete r.lots[b.lotId];
     }
     PropertiesService.getScriptProperties().setProperty('rules', JSON.stringify(r));
+    CacheService.getScriptCache().remove('state');
+    return adminData_();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ---------- Lot order & locking ----------
+// The order is a list of lot ids; a lot's number is its position in the list (1, 2, 3 ...).
+// Lot numbers lock automatically once the first bid is placed, or when the admin locks them.
+function getOrder_() {
+  try {
+    const o = JSON.parse(PropertiesService.getScriptProperties().getProperty('order') || '[]');
+    return Array.isArray(o) ? o : [];
+  } catch (_) { return []; }
+}
+function lotsLocked_() {
+  return PropertiesService.getScriptProperties().getProperty('lotsLocked') === 'yes' || allBids_().length > 0;
+}
+function saveOrder_(b) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    if (lotsLocked_()) throw new Error('Lot numbers are locked, so they cannot be changed now.');
+    const ids = Array.isArray(b.order) ? b.order.map(String) : null;
+    if (!ids || ids.length > 500) throw new Error('Bad lot order.');
+    const seen = {};
+    ids.forEach(function (id) {
+      if (!/^[a-z0-9-]{1,60}$/.test(id) || seen[id]) throw new Error('Bad lot order.');
+      seen[id] = true;
+    });
+    PropertiesService.getScriptProperties().setProperty('order', JSON.stringify(ids));
+    CacheService.getScriptCache().remove('state');
+    return adminData_();
+  } finally {
+    lock.releaseLock();
+  }
+}
+function setLotsLocked_(b) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const p = PropertiesService.getScriptProperties();
+    if (b.locked) {
+      p.setProperty('lotsLocked', 'yes');
+    } else {
+      if (allBids_().length > 0) throw new Error('Lot numbers cannot be unlocked after bidding has started.');
+      p.setProperty('lotsLocked', '');
+    }
     CacheService.getScriptCache().remove('state');
     return adminData_();
   } finally {

@@ -62,13 +62,21 @@ A **Bids** tab appears in the sheet after the first bid. You can watch bids arri
 
 ## 4. Print the QR codes
 
-Open `https://YOUR-NAME.github.io/lctw-auction/admin.html`, sign in, and click **Print QR code labels**. Two labels fit across an A4 or Letter page. **Scan a couple with your phone before the event.**
+**Order and lock the lot numbers first** (see "Lot order" below), then open `https://YOUR-NAME.github.io/lctw-auction/admin.html`, sign in, and click **Print QR code labels**. Labels print 6 per A4 page. **Print from Google Chrome** (Safari ignores the page settings and shifts the labels). **Scan a couple with your phone before the event.**
 
 ## 5. On the night
 
 - **Set the end time** in the admin dashboard. Bidding closes by itself at that time, or you can click **Close bidding now**.
 - After closing, click **Winners (CSV)** for the list of who to call and how much they owe.
 - If someone places a joke bid, open that lot in the admin table and click **Remove**.
+
+## Lot order and lot numbers (drag and drop)
+
+On the admin page, the **Lot numbers & order** panel shows every artwork as a picture with its lot number.
+- **Drag a picture** to a new place and the numbers renumber to match. On a touch screen, press and hold a picture first, or use the **‹ ›** buttons on it.
+- Click **Save order** to keep it. **Discard changes** and **Original order** are there if you change your mind.
+- **Lot numbers lock automatically when the first bid is placed**, and the server then refuses any reordering. You can also click **Lock lot numbers now** once the numbering is final (do this before printing the QR labels). Until the first bid you can **Unlock** again.
+- Guests see the new numbers within about 15 seconds. The QR codes don't contain lot numbers, so reordering never breaks them. Only the number printed on the label changes, so finish the order before printing.
 
 ## Names, descriptions, starting bids and increments (from the admin page)
 
@@ -87,7 +95,8 @@ The server enforces these amounts, and guests' pages update within about 15 seco
 | Starting bids and increments | **Admin page** (see above) |
 | Title, currency, fallback starting bid and increment | `assets/config.js` |
 | Artwork names and descriptions | **Admin page** (tap a lot), or `assets/items.js` |
-| Lot numbers, photos, adding/removing artworks | `assets/items.js` |
+| Lot order / lot numbers | **Admin page** (drag and drop; locks at the first bid) |
+| Photos, adding/removing artworks | `assets/items.js` |
 | Colours | top of `assets/styles.css` |
 | Admin password | Apps Script → ⚙️ Project Settings → Script properties → `ADMIN_PASSWORD` (takes effect immediately) |
 

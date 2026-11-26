@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Forum&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css?v=8">
+  <link rel="stylesheet" href="assets/styles.css?v=9">
   <style>
     /* ---------- A4 sheets: sized in millimetres so print = screen ---------- */
     @page { size: A4 portrait; margin: 10mm; }
@@ -118,7 +118,7 @@
         </div>
       </details>
       <div class="alert info" style="margin:.6rem 0 1rem">
-        <b>When printing:</b> Paper size <b>A4</b> · Scale <b>100%</b> / “Actual size” (not “Fit to page”) · Margins <b>Default</b> · turn <b>on</b> “Background graphics” · turn <b>off</b> “Headers and footers”.
+        <b>When printing:</b> Paper size <b>A4</b> · Scale <b>100%</b> / “Actual size” (not “Fit to page”) · Margins <b>Default</b> · turn <b>on</b> “Background graphics” · turn <b>off</b> “Headers and footers”. <b>Print from Google Chrome</b>: Safari ignores these page settings and shifts the labels.
       </div>
       <button class="btn" onclick="window.print()">🖨 Print <span id="page-count"></span></button>
     </div>
@@ -127,9 +127,9 @@
   </main>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="assets/config.js?v=8"></script>
-  <script src="assets/items.js?v=8"></script>
-  <script src="assets/app.js?v=8"></script>
+  <script src="assets/config.js?v=9"></script>
+  <script src="assets/items.js?v=9"></script>
+  <script src="assets/app.js?v=9"></script>
   <script>
   (function () {
     const A = window.Auction;
@@ -163,8 +163,9 @@
       let b = base.value.trim();
       if (b && !/\/$/.test(b)) b += '/';
       const local = !/^https?:\/\//.test(b) || /localhost|127\.0\.0\.1/.test(b);
-      document.getElementById('warn').innerHTML = local
-        ? '<div class="alert error">This address only works on this computer. Open this page from the live website, or enter its public address, before printing.</div>' : '';
+      document.getElementById('warn').innerHTML =
+        (local ? '<div class="alert error">This address only works on this computer. Open this page from the live website, or enter its public address, before printing.</div>' : '') +
+        (!A.lotsLocked() ? '<div class="alert info">The lot numbers are not locked yet. If you still plan to reorder the artworks, do that first, then <b>lock the lot numbers</b> on the <a href="admin.html">admin page</a> and print. (Reordering only changes the numbers printed on these labels; the QR codes themselves stay valid.)</div>' : '');
 
       const per = Number(sizeSel.value) || 6;
       let html = '';

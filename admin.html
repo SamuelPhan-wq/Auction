@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Forum&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css?v=8">
+  <link rel="stylesheet" href="assets/styles.css?v=9">
 </head>
 <body>
   <main class="page">
@@ -59,6 +59,22 @@
         </form>
       </div>
 
+      <div class="panel" style="margin-bottom:1rem" id="order-panel">
+        <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
+          <h3 style="margin:0">Lot numbers &amp; order</h3>
+          <span id="order-state"></span>
+        </div>
+        <p class="muted small" id="order-help" style="margin:.5rem 0 .8rem"></p>
+        <div class="order-grid" id="order-grid"></div>
+        <div class="controls-row" style="margin-top:.9rem">
+          <button class="btn" id="order-save" disabled>Save order</button>
+          <button class="btn secondary" id="order-discard" disabled>Discard changes</button>
+          <button class="btn secondary" id="order-original">Original order</button>
+          <div class="spacer"></div>
+          <button class="btn secondary" id="order-lock"></button>
+        </div>
+      </div>
+
       <div class="admin-actions">
         <a class="btn sand" href="qr.html" target="_blank">▦ Print QR code labels</a>
         <button class="btn secondary" id="csv-winners">⬇ Winners (CSV)</button>
@@ -92,9 +108,10 @@
     </section>
   </main>
 
-  <script src="assets/config.js?v=8"></script>
-  <script src="assets/items.js?v=8"></script>
-  <script src="assets/app.js?v=8"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+  <script src="assets/config.js?v=9"></script>
+  <script src="assets/items.js?v=9"></script>
+  <script src="assets/app.js?v=9"></script>
   <script>
   (function () {
     const A = window.Auction;
@@ -118,7 +135,7 @@
     function load(fromLogin) {
       return A.api.post({ action: 'admin', key: KEY }).then(function (res) {
         sessionStorage.setItem('lctw-admin-key', KEY);
-        DATA = res; A.applyRules(res.rules);
+        DATA = res; A.applyData(res);
         $('login').classList.add('hidden');
         $('dash').classList.remove('hidden');
         draw();
@@ -140,7 +157,7 @@
       const known = A.ITEMS.map(function (it) { return it.id; });
       // Bids for lots no longer in items.js still show up so nothing is lost
       Object.keys(byItem).forEach(function (id) {
-        if (known.indexOf(id) < 0) A.ITEMS.push({ id: id, lot: 999, title: (byItem[id][0].itemTitle || id) + ' (not in items.js)', image: '', startingBid: 0, minIncrement: 1 });
+        if (known.indexOf(id) < 0) A.ITEMS.push({ id: id, lot: 999, baseLot: 999, title: (byItem[id][0].itemTitle || id) + ' (not in items.js)', baseTitle: (byItem[id][0].itemTitle || id) + ' (not in items.js)', baseDescription: '', image: '', startingBid: 0, baseStartingBid: 0, minIncrement: 1, baseMinIncrement: 1 });
       });
       return A.ITEMS.map(function (it) {
         const all = (byItem[it.id] || []).slice().sort(function (a, b) { return b.amount - a.amount || b.time - a.time; });
@@ -171,6 +188,7 @@
       if (document.activeElement !== $('ends')) $('ends').value = s.endsAt ? toLocalInput(s.endsAt) : '';
       if (DATA.sheetUrl) { $('sheet-link').href = DATA.sheetUrl; $('sheet-link').classList.remove('hidden'); }
       fillDefaults();
+      drawOrder();
       $('updated').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
 
       const term = $('q').value.trim().toLowerCase();
@@ -233,7 +251,7 @@
         if (rm && !confirm('Remove this bid? The next highest bid becomes the leader. (You can restore it later.)')) return;
         (rm || rs).disabled = true;
         A.api.post({ action: rm ? 'removeBid' : 'restoreBid', key: KEY, bidId: bidId })
-          .then(function (res) { DATA = res; A.applyRules(res.rules); draw(); A.toast(rm ? 'Bid removed' : 'Bid restored'); })
+          .then(function (res) { DATA = res; A.applyData(res); draw(); A.toast(rm ? 'Bid removed' : 'Bid restored'); })
           .catch(function (err) { alert(err.message); draw(); });
         return;
       }
@@ -252,6 +270,96 @@
       c.addEventListener('click', function () { filter = c.dataset.f; A.$$('.chip[data-f]').forEach(function (x) { x.setAttribute('aria-pressed', String(x === c)); }); draw(); });
     });
     $('q').addEventListener('input', draw);
+
+    // ----- lot order (drag & drop) -----
+    let pending = null;      // ids in the order being arranged; null = nothing changed
+    let sortable = null;
+    let dragging = false;
+    function shownItems() { return A.ITEMS.filter(function (it) { return it.image; }); }
+    function currentIds() { return shownItems().map(function (it) { return it.id; }); }
+    function isDirty() { return !!pending && pending.join('|') !== currentIds().join('|'); }
+
+    function drawOrder() {
+      if (dragging || !DATA) return;
+      const locked = !!DATA.lotsLocked;
+      if (locked && pending) { pending = null; }
+      const base = currentIds();
+      const ids = pending || base;
+      const grid = $('order-grid');
+      if (sortable) { sortable.destroy(); sortable = null; }
+      grid.className = 'order-grid' + (locked ? ' locked' : '');
+      grid.innerHTML = ids.map(function (id, n) {
+        const it = A.itemById(id); if (!it) return '';
+        return '<div class="order-tile' + (id !== base[n] ? ' moved' : '') + '" data-id="' + A.esc(id) + '">' +
+          '<img src="' + A.esc(A.thumb(it)) + '" alt="" draggable="false" loading="lazy">' +
+          '<span class="order-num">' + (n + 1) + '</span>' +
+          (locked ? '' : '<span class="order-btns"><button type="button" data-move="-1" aria-label="Move earlier">‹</button><button type="button" data-move="1" aria-label="Move later">›</button></span>') +
+          '<span class="order-name">' + A.esc(it.title) + '</span></div>';
+      }).join('');
+
+      if (!locked && window.Sortable) {
+        sortable = Sortable.create(grid, {
+          animation: 150, ghostClass: 'order-ghost', chosenClass: 'order-chosen',
+          delay: 150, delayOnTouchOnly: true, touchStartThreshold: 5,   // touch screens: press and hold to pick up
+          onStart: function () { dragging = true; },
+          onEnd: function () {
+            pending = Array.from(grid.children).map(function (t) { return t.dataset.id; });
+            dragging = false;
+            setTimeout(drawOrder, 0);
+          },
+        });
+      }
+
+      const dirty = isDirty();
+      $('order-state').innerHTML = (locked ? '<span class="tag bad">🔒 Locked</span>' : '<span class="tag ok">Unlocked</span>') +
+        (dirty ? ' <span class="tag warn">Unsaved changes</span>' : '');
+      $('order-help').textContent = locked
+        ? (DATA.lockedByBids
+            ? 'Bidding has started, so the lot numbers are locked and can no longer be changed.'
+            : 'Lot numbers are locked. You can unlock them until the first bid is placed.')
+        : 'Drag a picture to a new place. The number on each picture is its lot number. On a touch screen, press and hold a picture first, or use the ‹ › buttons. Click Save order when you are happy. Lot numbers lock by themselves when the first bid is placed, so finish this before printing your QR labels.';
+      $('order-save').disabled = locked || !dirty;
+      $('order-discard').disabled = locked || !dirty;
+      $('order-original').disabled = locked;
+      $('order-original').style.display = locked ? 'none' : '';
+      $('order-save').style.display = locked ? 'none' : '';
+      $('order-discard').style.display = locked ? 'none' : '';
+      const lockBtn = $('order-lock');
+      lockBtn.style.display = (locked && DATA.lockedByBids) ? 'none' : '';
+      lockBtn.textContent = locked ? 'Unlock lot numbers' : '🔒 Lock lot numbers now';
+      lockBtn.className = 'btn ' + (locked ? 'secondary' : 'sand');
+    }
+
+    $('order-grid').addEventListener('click', function (e) {
+      const b = e.target.closest('[data-move]'); if (!b || DATA.lotsLocked) return;
+      const tile = b.closest('.order-tile');
+      const arr = (pending || currentIds()).slice();
+      const i = arr.indexOf(tile.dataset.id), j = i + Number(b.dataset.move);
+      if (i < 0 || j < 0 || j >= arr.length) return;
+      arr.splice(j, 0, arr.splice(i, 1)[0]);
+      pending = arr; drawOrder();
+    });
+    $('order-discard').onclick = function () { pending = null; drawOrder(); };
+    $('order-original').onclick = function () {
+      pending = shownItems().slice().sort(function (a, b) { return a.baseLot - b.baseLot; }).map(function (it) { return it.id; });
+      drawOrder();
+    };
+    $('order-save').onclick = function () {
+      const btn = $('order-save'); btn.disabled = true; btn.textContent = 'Saving…';
+      A.api.post({ action: 'order', key: KEY, order: pending })
+        .then(function (res) { DATA = res; A.applyData(res); pending = null; draw(); A.toast('Lot order saved'); })
+        .catch(function (err) { alert(err.message); load(); })
+        .finally(function () { btn.textContent = 'Save order'; drawOrder(); });
+    };
+    $('order-lock').onclick = function () {
+      const lock = !DATA.lotsLocked;
+      if (lock && isDirty() && !confirm('You have unsaved changes to the lot order. Lock the numbers WITHOUT saving them?')) return;
+      if (lock && !confirm('Lock the lot numbers now?\n\nNobody will be able to change the order after this. Do it once the numbering is final and before printing the QR labels.')) return;
+      if (lock) pending = null;
+      A.api.post({ action: 'lockLots', key: KEY, locked: lock })
+        .then(function (res) { DATA = res; A.applyData(res); draw(); A.toast(lock ? 'Lot numbers locked' : 'Lot numbers unlocked'); })
+        .catch(function (err) { alert(err.message); });
+    };
 
     // ----- starting bids & increments -----
     function lotRuleForm(it) {
@@ -273,7 +381,7 @@
     }
     function saveRules(body, msg) {
       return A.api.post(Object.assign({ action: 'rules', key: KEY }, body))
-        .then(function (res) { DATA = res; A.applyRules(res.rules); draw(); A.toast(msg); })
+        .then(function (res) { DATA = res; A.applyData(res); draw(); A.toast(msg); })
         .catch(function (err) { alert(err.message); });
     }
     A.$$('.cur-sym').forEach(function (el) { el.textContent = A.CFG.currencySymbol || ''; });
@@ -298,7 +406,7 @@
     });
 
     function settings(body) {
-      return A.api.post(Object.assign({ action: 'settings', key: KEY }, body)).then(function (res) { DATA = res; A.applyRules(res.rules); draw(); }).catch(function (err) { alert(err.message); });
+      return A.api.post(Object.assign({ action: 'settings', key: KEY }, body)).then(function (res) { DATA = res; A.applyData(res); draw(); }).catch(function (err) { alert(err.message); });
     }
     $('toggle-closed').onclick = function () {
       const closing = !DATA.settings.closed;
