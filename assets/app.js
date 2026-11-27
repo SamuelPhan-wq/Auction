@@ -23,17 +23,18 @@
   // Lot numbers: the admin's drag-and-drop order (a list of ids) wins; lots not in the list
   // keep their items.js order after the listed ones. ITEMS is kept sorted by lot number.
   function lotOrderFor(order) {
-    const known = {}; ITEMS.forEach(function (it) { known[it.id] = true; });
+    const known = {}; ALL.forEach(function (it) { known[it.id] = true; });
     const seen = {}; const out = [];
     (order || []).forEach(function (id) { if (known[id] && !seen[id]) { seen[id] = true; out.push(id); } });
-    ITEMS.slice().sort(function (a, b) { return a.baseLot - b.baseLot; }).forEach(function (it) { if (!seen[it.id]) out.push(it.id); });
+    ALL.slice().sort(function (a, b) { return a.baseLot - b.baseLot; }).forEach(function (it) { if (!seen[it.id]) out.push(it.id); });
     return out;
   }
   function applyOrder(order, locked) {
     ORDER = Array.isArray(order) ? order : [];
     if (locked != null) LOTS_LOCKED = !!locked;
     const ids = lotOrderFor(ORDER);
-    ITEMS.forEach(function (it) { it.lot = ids.indexOf(it.id) + 1; });
+    // every artwork (hidden ones too) keeps its own number, so hiding one leaves a gap instead of renumbering
+    ALL.forEach(function (it) { it.lot = ids.indexOf(it.id) + 1; });
     ITEMS.sort(function (a, b) { return a.lot - b.lot; });
   }
 
@@ -201,7 +202,7 @@
             save(d); return delay(admin());
           }
           if (b.action === 'removeArt') {
-            if (locked(d)) throw new Error('Lot numbers are locked, so artworks cannot be removed or restored now.');
+            if (b.removed && d.bids.some(function (x) { return x.itemId === b.lotId && x.status !== 'removed'; })) throw new Error('This artwork already has bids, so it cannot be hidden. Remove its bids first.');
             d.removed = d.removed.filter(function (x) { return x !== b.lotId; });
             if (b.removed) d.removed.push(b.lotId);
             save(d); return delay(admin());
@@ -502,7 +503,7 @@
     CFG: CFG, ITEMS: ITEMS, DEMO: DEMO, api: api,
     $: $, $$: $$, esc: esc, money: money, store: store, toast: toast, timeAgo: timeAgo,
     itemById: itemById, thumb: thumb, full: full, itemUrl: itemUrl, siteBase: siteBase,
-    refresh: refresh, onState: onState, ready: ready, applyRules: applyRules, applyData: applyData, removedItems: function () { return ALL.filter(function (it) { return REMOVED.indexOf(it.id) >= 0; }); }, lotsLocked: function () { return LOTS_LOCKED; }, getOrder: function () { return ORDER.slice(); }, getRules: function () { return RULES; }, startPolling: startPolling, getState: function () { return STATE; },
+    refresh: refresh, onState: onState, ready: ready, applyRules: applyRules, applyData: applyData, allItems: function () { return ALL.slice().sort(function (a, b) { return a.lot - b.lot; }); }, isRemoved: function (id) { return REMOVED.indexOf(id) >= 0; }, removedItems: function () { return ALL.filter(function (it) { return REMOVED.indexOf(it.id) >= 0; }); }, lotsLocked: function () { return LOTS_LOCKED; }, getOrder: function () { return ORDER.slice(); }, getRules: function () { return RULES; }, startPolling: startPolling, getState: function () { return STATE; },
     info: info, isClosed: isClosed, notStarted: notStarted, myBids: myBids, mountStatus: mountStatus, renderChrome: renderChrome,
     bidFormHtml: bidFormHtml, wireBidForm: wireBidForm, successHtml: successHtml, openBidSheet: openBidSheet, mineTag: mineTag,
   };

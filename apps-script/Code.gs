@@ -95,7 +95,7 @@ function placeBid_(b, receivedAt) {
       const seen = cache.get('req-' + requestId);
       if (seen) return { ok: true, bidId: seen, state: publicState_(true) };
     }
-    if (getRemoved_().indexOf(itemId) >= 0) throw new Error('This artwork is no longer in the auction.');
+    if (getRemoved_().indexOf(itemId) >= 0) throw new Error('This artwork has been taken out of the auction.');
     const settings = getSettings_();
     if (isClosed_(settings, (receivedAt || Date.now()) - CLOSE_GRACE_SECONDS * 1000)) throw new Error('Sorry — bidding has closed.');
     if (!settings.started) throw new Error('Bidding has not started yet.');
@@ -329,9 +329,10 @@ function saveOrder_(b) {
     lock.releaseLock();
   }
 }
-// ---------- Removing artworks ----------
-// An artwork can be taken out of the auction (and put back) until the lot numbers are locked, because
-// removing one renumbers everything after it. Nothing is erased: the list of removed ids is just kept here.
+// ---------- Hiding artworks ----------
+// An artwork can be hidden from the auction (and shown again) at any time. Hiding never changes any lot
+// number: the hidden lot's number is simply skipped, so printed QR labels stay correct. An artwork that
+// already has bids can't be hidden. Nothing is erased: the list of hidden ids is just kept here.
 function getRemoved_() {
   try {
     const r = JSON.parse(PropertiesService.getScriptProperties().getProperty('removed') || '[]');
@@ -342,9 +343,11 @@ function setArtRemoved_(b) {
   const lock = LockService.getScriptLock();
   lock.waitLock(15000);
   try {
-    if (lotsLocked_()) throw new Error('Lot numbers are locked, so artworks cannot be removed or restored now.');
     const id = String(b.lotId || '');
     if (!/^[a-z0-9-]{1,60}$/.test(id)) throw new Error('Unknown artwork.');
+    if (b.removed && activeBids_().some(function (r) { return r.itemId === id; })) {
+      throw new Error('This artwork already has bids, so it cannot be hidden. Remove its bids first (open the lot in the table and click Remove on each bid).');
+    }
     let list = getRemoved_().filter(function (x) { return x !== id; });
     if (b.removed) list.push(id);
     PropertiesService.getScriptProperties().setProperty('removed', JSON.stringify(list));

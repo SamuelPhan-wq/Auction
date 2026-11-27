@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Forum&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Forum&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800&display=swap" rel="stylesheet"></noscript>
-  <link rel="stylesheet" href="assets/styles.css?v=17">
+  <link rel="stylesheet" href="assets/styles.css?v=18">
 </head>
 <body>
   <main class="page">
@@ -127,9 +127,9 @@
   </main>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
-  <script src="assets/config.js?v=17"></script>
-  <script src="assets/items.js?v=17"></script>
-  <script src="assets/app.js?v=17"></script>
+  <script src="assets/config.js?v=18"></script>
+  <script src="assets/items.js?v=18"></script>
+  <script src="assets/app.js?v=18"></script>
   <script>
   (function () {
     const A = window.Auction;
@@ -307,6 +307,12 @@
       currentIds().forEach(function (id) { if (ids.indexOf(id) < 0) ids.push(id); });
       return ids;
     }
+    // The complete order including hidden artworks: visible ones are filled into the visible slots in the new
+    // order, hidden ones stay exactly where they are, so no lot number changes by accident.
+    function fullOrderFor(visibleIds) {
+      let k = 0;
+      return A.allItems().map(function (it) { return A.itemById(it.id) ? visibleIds[k++] : it.id; });
+    }
     function isDirty() { return !!pending && pendingIds().join('|') !== currentIds().join('|'); }
 
     function drawOrder() {
@@ -315,6 +321,8 @@
       if (locked && pending) { pending = null; }
       const base = currentIds();
       const ids = pending ? pendingIds() : base;
+      // each picture shows its real lot number (a hidden artwork's number is skipped, never reused)
+      const slots = A.allItems().filter(function (it) { return !!A.itemById(it.id); }).map(function (it) { return it.lot; });
       const grid = $('order-grid');
       if (sortable) { sortable.destroy(); sortable = null; }
       grid.className = 'order-grid' + (locked ? ' locked' : '');
@@ -322,9 +330,9 @@
         const it = A.itemById(id); if (!it) return '';
         return '<div class="order-tile' + (id !== base[n] ? ' moved' : '') + '" data-id="' + A.esc(id) + '">' +
           '<img src="' + A.esc(A.thumb(it)) + '" alt="" draggable="false" loading="lazy">' +
-          '<span class="order-num">' + (n + 1) + '</span>' +
-          (locked ? '' : '<span class="order-btns"><button type="button" data-move="-1" aria-label="Move earlier">‹</button><button type="button" data-move="1" aria-label="Move later">›</button></span>' +
-            '<button type="button" class="order-del" data-del="1" aria-label="Remove from the auction" title="Remove from the auction">✕</button>') +
+          '<span class="order-num">' + (slots[n] || n + 1) + '</span>' +
+          (locked ? '' : '<span class="order-btns"><button type="button" data-move="-1" aria-label="Move earlier">‹</button><button type="button" data-move="1" aria-label="Move later">›</button></span>') +
+          '<button type="button" class="order-del" data-del="1" aria-label="Hide from the auction" title="Hide from the auction">✕</button>' +
           '<span class="order-name">' + A.esc(it.title) + '</span></div>';
       }).join('');
 
@@ -343,10 +351,10 @@
 
       const removed = A.removedItems();
       $('removed-list').innerHTML = removed.length
-        ? '<h4 style="margin:1rem 0 .4rem">Removed from the auction (' + removed.length + ')</h4>' +
+        ? '<h4 style="margin:1rem 0 .4rem">Hidden from the auction (' + removed.length + ')</h4>' +
           removed.map(function (it) {
-            return '<div class="removed-row"><img src="' + A.esc(A.thumb(it)) + '" alt="" loading="lazy"><span>' + A.esc(it.title) + '</span>' +
-              (locked ? '<span class="muted small">locked</span>' : '<button type="button" class="btn secondary small" data-restore-art="' + A.esc(it.id) + '">Restore</button>') + '</div>';
+            return '<div class="removed-row"><img src="' + A.esc(A.thumb(it)) + '" alt="" loading="lazy"><span>Lot ' + A.esc(it.lot) + ' · ' + A.esc(it.title) + '</span>' +
+              '<button type="button" class="btn secondary small" data-restore-art="' + A.esc(it.id) + '">Show again</button></div>';
           }).join('')
         : '';
 
@@ -355,9 +363,9 @@
         (dirty ? ' <span class="tag warn">Unsaved changes</span>' : '');
       $('order-help').textContent = locked
         ? (DATA.settings.started !== false
-            ? 'Bidding has started, so the lot numbers are locked and can no longer be changed.'
-            : 'Lot numbers are locked. You can unlock them until you start bidding.')
-        : 'Drag a picture to a new place. The number on each picture is its lot number. On a touch screen, press and hold a picture first, or use the ‹ › buttons. Click ✕ on a picture to take it out of the auction. Click Save order when you are happy. The lot numbers lock when you click Start bidding, so finish this before printing your QR labels.';
+            ? 'Bidding has started, so the lot numbers are locked. You can still hide an artwork that was damaged or is missing (click its ✕): every other lot keeps its number.'
+            : 'Lot numbers are locked. You can unlock them until you start bidding. You can still hide an artwork (click its ✕): every other lot keeps its number.')
+        : 'Drag a picture to a new place. The number on each picture is its lot number. On a touch screen, press and hold a picture first, or use the ‹ › buttons. Click ✕ on a picture to hide it from the auction (the other lots keep their numbers). Click Save order when you are happy. The lot numbers lock when you click Start bidding, so finish this before printing your QR labels.';
       $('order-save').disabled = locked || !dirty;
       $('order-discard').disabled = locked || !dirty;
       $('order-original').disabled = locked;
@@ -374,20 +382,26 @@
       return A.api.post({ action: 'removeArt', key: KEY, lotId: id, removed: removed })
         .then(function (res) {
           DATA = res; A.applyData(res);
-          if (pending) pending = pending.filter(function (x) { return x !== id || !removed; });
-          draw(); A.toast(removed ? 'Removed from the auction' : 'Restored');
+          pending = null;
+          draw(); A.toast(removed ? 'Hidden from the auction' : 'Shown again');
         })
         .catch(function (err) { alert(err.message); load(); });
     }
     $('removed-list').addEventListener('click', function (e) {
-      const b = e.target.closest('[data-restore-art]'); if (!b || DATA.lotsLocked) return;
+      const b = e.target.closest('[data-restore-art]'); if (!b) return;
+      if (isDirty() && !confirm('You have unsaved changes to the lot order. Showing this artwork again will throw them away. Continue?')) return;
       b.disabled = true; setRemoved(b.dataset.restoreArt, false);
     });
     $('order-grid').addEventListener('click', function (e) {
       const del = e.target.closest('[data-del]');
-      if (del && !DATA.lotsLocked) {
+      if (del) {
         const it = A.itemById(del.closest('.order-tile').dataset.id); if (!it) return;
-        if (!confirm('Remove "' + it.title + '" from the auction?\n\nIt disappears for guests and from the QR labels, and the lots after it are renumbered. Nothing is erased: you can restore it from the list below the pictures until bidding starts.')) return;
+        if (DATA.bids.some(function (b) { return b.itemId === it.id && b.status !== 'removed'; })) {
+          alert('"' + it.title + '" already has bids, so it cannot be hidden. Remove its bids first (open the lot in the table below and click Remove on each bid).');
+          return;
+        }
+        if (isDirty() && !confirm('You have unsaved changes to the lot order. Hiding this artwork will throw them away. Continue?')) return;
+        if (!confirm('Hide "' + it.title + '" (Lot ' + it.lot + ') from the auction?\n\nGuests will no longer see it and nobody can bid on it. Every other lot keeps its number, so your printed labels stay correct (Lot ' + it.lot + ' is simply skipped). Nothing is erased: you can show it again from the list below the pictures at any time.')) return;
         setRemoved(it.id, true);
         return;
       }
@@ -406,7 +420,7 @@
     };
     $('order-save').onclick = function () {
       const btn = $('order-save'); btn.disabled = true; btn.textContent = 'Saving…';
-      A.api.post({ action: 'order', key: KEY, order: pendingIds() })
+      A.api.post({ action: 'order', key: KEY, order: fullOrderFor(pendingIds()) })
         .then(function (res) { DATA = res; A.applyData(res); pending = null; draw(); A.toast('Lot order saved'); })
         .catch(function (err) { alert(err.message); load(); })
         .finally(function () { btn.textContent = 'Save order'; drawOrder(); });
