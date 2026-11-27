@@ -335,3 +335,11 @@ table.bids tr.removed td { text-decoration: line-through; color: var(--muted); }
 .sk-line.short { width: 55%; }
 @keyframes sk-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .card.skeleton .thumb, .sk-line { animation: none; } }
+
+/* ---------- Admin: remove an artwork ---------- */
+.order-del { position: absolute; right: .3rem; bottom: .3rem; width: 1.6rem; height: 1.6rem; border-radius: 50%; border: 0; padding: 0;
+  background: var(--danger-soft); color: var(--danger); font-size: .8rem; font-weight: 800; line-height: 1; cursor: pointer; }
+.order-grid:not(.locked) .order-name { padding-right: 2.2rem; }
+.removed-row { display: flex; align-items: center; gap: .7rem; padding: .45rem 0; border-top: 1px solid var(--border); }
+.removed-row img { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; flex: none; background: var(--surface-2); }
+.removed-row span:first-of-type { flex: 1; font-weight: 700; min-width: 0; }

@@ -13,6 +13,8 @@
     it.baseTitle = it.title; it.baseDescription = it.description || '';
     it.baseLot = it.lot;
   });
+  const ALL = ITEMS.slice();            // every artwork in items.js; ITEMS holds only the ones still in the auction
+  let REMOVED = [];
   let RULES = { defaults: {}, lots: {} };
   let ORDER = [];
   let LOTS_LOCKED = false;
@@ -39,7 +41,7 @@
   function applyRules(rules) {
     if (!rules) return;
     RULES = { defaults: rules.defaults || {}, lots: rules.lots || {} };
-    ITEMS.forEach(function (it) {
+    ALL.forEach(function (it) {
       const lot = RULES.lots[it.id] || {};
       const d = RULES.defaults;
       it.startingBid = lot.startingBid != null ? lot.startingBid : (d.startingBid != null ? d.startingBid : it.baseStartingBid);
@@ -49,8 +51,15 @@
     });
   }
   // One call for everything the server sends: rules (names, bids) + lot order + lock state
+  // Artworks the admin has taken out of the auction disappear everywhere (gallery, QR labels, lot numbers)
+  function applyRemoved(list) {
+    REMOVED = Array.isArray(list) ? list : [];
+    ITEMS.length = 0;
+    ALL.forEach(function (it) { if (REMOVED.indexOf(it.id) < 0) ITEMS.push(it); });
+  }
   function applyData(res) {
     if (!res) return;
+    applyRemoved(res.removed);
     applyRules(res.rules);
     applyOrder(res.order, res.lotsLocked);
   }
@@ -122,7 +131,7 @@
 
   const demo = (function () {
     const KEY = 'lctw-auction-demo';
-    function db() { const d = store(KEY) || { bids: [], settings: { closed: false, endsAt: null } }; d.rules = d.rules || { defaults: {}, lots: {} }; d.order = d.order || []; return d; }
+    function db() { const d = store(KEY) || { bids: [], settings: { closed: false, endsAt: null } }; d.rules = d.rules || { defaults: {}, lots: {} }; d.order = d.order || []; d.removed = d.removed || []; return d; }
     function started(d) { return !!d.started || d.bids.length > 0; }
     function locked(d) { return !!d.lotsLocked || started(d); }
     function cleanRule(x) {
@@ -146,9 +155,9 @@
       });
       Object.keys(items).forEach(function (k) { items[k].history.sort(function (a, b) { return b.amount - a.amount; }); items[k].history = items[k].history.slice(0, 8); });
       const s = Object.assign({}, d.settings); s.isClosed = !!isClosed(s); s.started = started(d);
-      return { ok: true, items: items, settings: s, rules: d.rules, order: d.order, lotsLocked: locked(d), serverTime: Date.now() };
+      return { ok: true, items: items, settings: s, rules: d.rules, order: d.order, removed: d.removed, lotsLocked: locked(d), serverTime: Date.now() };
     }
-    function admin() { const d = db(); const s = Object.assign({}, d.settings); s.isClosed = !!isClosed(s); s.started = started(d); return { ok: true, bids: d.bids, settings: s, rules: d.rules, order: d.order, lotsLocked: locked(d), lockedByBids: d.bids.length > 0, serverTime: Date.now() }; }
+    function admin() { const d = db(); const s = Object.assign({}, d.settings); s.isClosed = !!isClosed(s); s.started = started(d); return { ok: true, bids: d.bids, settings: s, rules: d.rules, order: d.order, removed: d.removed, lotsLocked: locked(d), lockedByBids: d.bids.length > 0, serverTime: Date.now() }; }
     function delay(v) { return new Promise(function (res) { setTimeout(function () { res(v); }, 250); }); }
     return {
       state: function () { return delay(state()); },
@@ -189,6 +198,12 @@
           if (b.action === 'start') {
             if (b.started) d.started = true;
             else { if (d.bids.length) throw new Error('Bidding cannot be un-started once bids have been placed.'); d.started = false; }
+            save(d); return delay(admin());
+          }
+          if (b.action === 'removeArt') {
+            if (locked(d)) throw new Error('Lot numbers are locked, so artworks cannot be removed or restored now.');
+            d.removed = d.removed.filter(function (x) { return x !== b.lotId; });
+            if (b.removed) d.removed.push(b.lotId);
             save(d); return delay(admin());
           }
           if (b.action === 'lockLots') {
@@ -487,7 +502,7 @@
     CFG: CFG, ITEMS: ITEMS, DEMO: DEMO, api: api,
     $: $, $$: $$, esc: esc, money: money, store: store, toast: toast, timeAgo: timeAgo,
     itemById: itemById, thumb: thumb, full: full, itemUrl: itemUrl, siteBase: siteBase,
-    refresh: refresh, onState: onState, ready: ready, applyRules: applyRules, applyData: applyData, lotsLocked: function () { return LOTS_LOCKED; }, getOrder: function () { return ORDER.slice(); }, getRules: function () { return RULES; }, startPolling: startPolling, getState: function () { return STATE; },
+    refresh: refresh, onState: onState, ready: ready, applyRules: applyRules, applyData: applyData, removedItems: function () { return ALL.filter(function (it) { return REMOVED.indexOf(it.id) >= 0; }); }, lotsLocked: function () { return LOTS_LOCKED; }, getOrder: function () { return ORDER.slice(); }, getRules: function () { return RULES; }, startPolling: startPolling, getState: function () { return STATE; },
     info: info, isClosed: isClosed, notStarted: notStarted, myBids: myBids, mountStatus: mountStatus, renderChrome: renderChrome,
     bidFormHtml: bidFormHtml, wireBidForm: wireBidForm, successHtml: successHtml, openBidSheet: openBidSheet, mineTag: mineTag,
   };

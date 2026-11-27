@@ -53,6 +53,7 @@ function doPost(e) {
       case 'rules':      requireAdmin_(body); return json_(saveRules_(body));
       case 'order':      requireAdmin_(body); return json_(saveOrder_(body));
       case 'lockLots':   requireAdmin_(body); return json_(setLotsLocked_(body));
+      case 'removeArt':  requireAdmin_(body); return json_(setArtRemoved_(body));
       case 'start':      requireAdmin_(body); return json_(setStarted_(body));
       case 'reset':      requireAdmin_(body); return json_(resetAuction_(body));
       default:           return json_({ ok: false, error: 'Unknown action' });
@@ -94,6 +95,7 @@ function placeBid_(b, receivedAt) {
       const seen = cache.get('req-' + requestId);
       if (seen) return { ok: true, bidId: seen, state: publicState_(true) };
     }
+    if (getRemoved_().indexOf(itemId) >= 0) throw new Error('This artwork is no longer in the auction.');
     const settings = getSettings_();
     if (isClosed_(settings, (receivedAt || Date.now()) - CLOSE_GRACE_SECONDS * 1000)) throw new Error('Sorry — bidding has closed.');
     if (!settings.started) throw new Error('Bidding has not started yet.');
@@ -146,7 +148,7 @@ function publicState_(skipCache) {
     items[k].history = items[k].history.slice(0, HISTORY_LENGTH);
   });
   const state = { ok: true, items: items, settings: getSettings_(), rules: getRules_(),
-                  order: getOrder_(), lotsLocked: lotsLocked_(), serverTime: Date.now() };
+                  order: getOrder_(), removed: getRemoved_(), lotsLocked: lotsLocked_(), serverTime: Date.now() };
   state.settings.isClosed = isClosed_(state.settings);
   try { cache.put('state', JSON.stringify(state), STATE_CACHE_SECONDS); } catch (_) {}
   return state;
@@ -168,7 +170,7 @@ function adminData_() {
   });
   const settings = getSettings_();
   settings.isClosed = isClosed_(settings);
-  return { ok: true, bids: rows, settings: settings, rules: getRules_(), order: getOrder_(), lotsLocked: lotsLocked_(),
+  return { ok: true, bids: rows, settings: settings, rules: getRules_(), order: getOrder_(), removed: getRemoved_(), lotsLocked: lotsLocked_(),
            lockedByBids: allBids_().length > 0, serverTime: Date.now(),
            sheetUrl: SpreadsheetApp.getActiveSpreadsheet().getUrl() };
 }
@@ -327,6 +329,32 @@ function saveOrder_(b) {
     lock.releaseLock();
   }
 }
+// ---------- Removing artworks ----------
+// An artwork can be taken out of the auction (and put back) until the lot numbers are locked, because
+// removing one renumbers everything after it. Nothing is erased: the list of removed ids is just kept here.
+function getRemoved_() {
+  try {
+    const r = JSON.parse(PropertiesService.getScriptProperties().getProperty('removed') || '[]');
+    return Array.isArray(r) ? r : [];
+  } catch (_) { return []; }
+}
+function setArtRemoved_(b) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    if (lotsLocked_()) throw new Error('Lot numbers are locked, so artworks cannot be removed or restored now.');
+    const id = String(b.lotId || '');
+    if (!/^[a-z0-9-]{1,60}$/.test(id)) throw new Error('Unknown artwork.');
+    let list = getRemoved_().filter(function (x) { return x !== id; });
+    if (b.removed) list.push(id);
+    PropertiesService.getScriptProperties().setProperty('removed', JSON.stringify(list));
+    CacheService.getScriptCache().remove('state');
+    return adminData_();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function setLotsLocked_(b) {
   const lock = LockService.getScriptLock();
   lock.waitLock(15000);
